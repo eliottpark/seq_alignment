@@ -395,7 +395,8 @@ class Aligner:
 
     def align_to_genome(self, read_sequence):
         """
-        Returns the best alignment of the read sequence to the genome.
+        Returns the best alignment of the read sequence to the genome. This will cover reads
+        that originate from new exons.
 
         read_sequence: input read text to be aligned
 
@@ -404,7 +405,16 @@ class Aligner:
 
         If no good matches are found: return the best match you can find or return []
         """
-        pass
+        # Return value
+        matches = []
+        # Retrieve the best inexact alignment to the genome
+        # locations = (<range of matches in suffix array>, <length of longest match>)
+        locations, num_mismatches = self.greedy_inexact_alignment(read_sequence, self._m, self._occ)
+
+        if locations:
+            matches.append((0, self._sa[locations[0][0]]))
+        
+        return matches
 
     def align_seeds(self, read_sequence):
         """
