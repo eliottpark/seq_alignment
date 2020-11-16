@@ -183,21 +183,6 @@ def exact_suffix_matches(p, M, occ):
     ((2, 4), 2)
     """
     
-    
-
-    # sp, ep = M[p[len(p) - 1]], M[p[len(p) - 1]] + occ[p[len(p) - 1]][-1]
-
-    # if len(p) == 1 and sp < ep:
-    #     max_length = 1
-
-    # for c in p[::-1][1:]:
-    #     max_length += 1
-    #     temp_sp = M[c] + occ[c][sp - 1]
-    #     temp_ep = M[c] + occ[c][ep] - 1
-    #     if temp_sp >= temp_ep:
-    #         break
-    #     sp, ep = temp_sp, temp_ep
-
     iterator = iter(M.keys())
     
     while True:
@@ -210,23 +195,11 @@ def exact_suffix_matches(p, M, occ):
                 ep = len(occ[char]) - 1
             break
 
-    # for i in M.keys():
-    #     if i == p[-1]:
-    #         sp = M[i]
-    # sp, ep = M[p[len(p)-1]], M[p[-1]] + occ[p[-1]][-1]
-
     if ep < sp:
         return ((None), 0)
 
     i = len(p) - 2
     while i >= 0:
-        # print("c: ", p[i])
-        # print("i: ", i)
-        # print("SP: ", sp)
-        # print("EP: ", ep)
-        # print("M: ", M)
-        # print('occ1: ', occ[p[i]][sp - 1])
-        # print('occ2: ', occ[p[i]][ep])
         temp_sp = M[p[i]] + occ[p[i]][sp - 1]
         temp_ep = M[p[i]] + occ[p[i]][ep] - 1
         if temp_sp >= temp_ep:
@@ -252,22 +225,25 @@ class Aligner:
                     so don't stress if you are close. Server is 1.25 times faster than the i7 CPU on my computer
 
         """
-        # Making a set of isoforms to represent transcriptome.
-        self._isoforms_sa = {}
+        # Making a set of isoforms to represent transcriptome. TODO: could be a hash table
+        self._isoforms = {}
         # Iterate through all genes
         for gene in known_genes:
             # Iterate through all isoforms for each gene
             for isoform in gene.isoforms:
                 # Build isoform from individual exons
                 full_isoform = ''
-                for exon in isoform.exons:
+                for exon in isoform.exons: # If ordered, ok. if not, need to make sure
                     full_isoform += genome_sequence[exon.start:exon.end]
                 # Find SA, M, and OCC of the isoform
-                self._isoforms_sa[isoform.id] = [get_suffix_array(full_isoform),
-                                                get_M(full_isoform), get_occ(full_isoform)]
+                sa = get_suffix_array(full_isoform)
+                self._isoforms[isoform.id] = [get_bwt(full_isoform, sa), sa,
+                                                get_M(full_isoform), get_occ(full_isoform), 
+                                                full_isoform, isoform]
                     
         # Build SA, M, OCC for whole genome
-        self._suffix_array = get_suffix_array(genome_sequence)
+        self._sa = get_suffix_array(genome_sequence)
+        self._bwt = get_bwt(genome_sequence, self._sa)
         self._m = get_M(genome_sequence)
         self._occ = get_occ(genome_sequence)
             
@@ -291,4 +267,137 @@ class Aligner:
 
         Time limit: 0.5 seconds per read on average on the provided data.
         """
+
+        def simplified_bowtie(p, M, occ, isoform_id):
+            """
+            p: Query string
+            T: BWT of the text (for isoforms, pass in BWT)
+            K: max # of backtracks
+
+            Iterate from last to 
+            """
+            nucleotides = ['A', 'C', 'T', 'G']
+            R = {} # keep track of all the substitutions so far; R{i} is the set of characters already considered for position i
+            num_mismatches = 0
+            longest_match_length = 0
+            query = p
+            query_len = len(query)
+
+            while num_mismatches < MAX_NUM_MISMATCHES:
+                locations = exact_suffix_matches(query, M, occ)
+
+                if locations[1] == query_len:
+                    return locations, num_mismatches
+                else:
+                    i = query_len - locations[1] - 1
+                    # Is there a way to access the index in the reference string just to set it equal?
+                    # Line below is supposed to get the index number in the original isoform that our query doesn't align to
+                    # so we can assign it directly to the query.
+                    j = self._isoforms[isoform_id][1][locations[0][0]]
+                    
+                    query[i] = self._isoforms[isoform_id][4][j]
+
+                    num_mismatches += 1
+            return None, None
+
+        # Prioritize matching to known isoforms. Minimize number of mismatches
+        matches = [] # (isoform.id, locations, num_mismatches)
+        # Matches are in the form (read start index, genome start index, length)
+        for isoform in self._isoforms:
+            locations, num_mismatches = simplified_bowtie(read_sequence, isoform[2], isoform[3])
+            if locations not None and num_mismatches not None:
+                # Want to add to list of matches and then find the best match.
+                matches.append((isoform.id, locations, num_mismatches))
+
+        
+        # Check to see if there are any returned matches.
+        if matches:
+            # Finding the match with the least number of mismatches and converting it to the correct format.
+            best_match = (0, 0, 6)
+            for match in matches:
+                if match[2] < best_match[2]:
+                    best_match = match
+            # Now need to convert into correct format.
+            # Format: [(index of read, index of genome, length of match)]
+            isoform = self._isoforms[best_match[0]]
+
+            # Start and end indices for the isoform of interest
+            sa = isoform[1]
+            index_ifs = sa[best_match[1][0][0]] # index of first match in fully concatenated isoform string
+            end = sa[best_match[1][0][1]] # index of last match in fully concatenated isoform string
+        
+            # check to see if start = end (only a single match)
+            if index_ifs != end:
+                # TODO figure out what happens in this situation
+            # Iterate through exons to find indices
+            exon_matches = []
+            read_index = 0
+            genome_index = 0
+            offset = 0
+            for exon in isoform[5].exons: # This should be ordered
+                genome_index = index_ifs + exon.start
+                if genome_index < exon.end:
+                    length = exon.end - genome_index
+                    exon_matches.append(read_index, genome_index, length)
+                    read_index += length
+                else:
+                    length = exon.end - exon.start
+                index_ifs += length
+                                
+
+
+
+                if index_ifs >= exon.start and index_ifs < exon.end:
+                    exon_len = exon.end - start
+                    exon_matches.append((read_index, ))
+
+            
+
+
+            
+
+                
+
+
+
+            
+            
+            
+            num_backtracks = 0
+            while num_backtracks < k:
+                locations = exact_suffix_matches(query, M, occ)
+
+                # If we improve our match length, then we have successfully introduced a mismatch
+                if locations[1] > longest_match_length:
+                    longest_match_length = locations[1]
+                    best_match = locations
+                    num_mismatches += 1
+                    
+                if locations[1] == 0: # might fold into else 
+                    return [], 0
+                elif locations[1] == query_len and num_mismatches <= MAX_NUM_MISMATCHES:
+                    return locations, num_mismatches
+                else:
+                    i = query_len - locations[1] - 1
+                    mismatched_char = query[i]
+                    # leftmost just-visited position with minimal quality
+                    j = i + 1
+                    if j not in R.keys():
+                        c = random.choice(set(nucleotides) - set(query[j]))
+                        R[j] = set(c)
+                        
+                    else:
+                        c = random.choice(set(nucleotides) - set(R[j]))
+                        R[j] += c
+                    query[j] = c # Introducing a mismatch
+
+                    num_backtracks += 1                   
+            return [], 0
+                        
+
+        
+
+
+
+
         pass
