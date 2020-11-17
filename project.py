@@ -13,6 +13,7 @@
 
 import sys # DO NOT EDIT THIS
 import numpy as np
+import time
 
 from shared import *
 
@@ -41,8 +42,24 @@ def get_suffix_array(s):
     suffixes = []
     for i in range(len(s)):
         suffixes = np.append(suffixes, s[i:])
+    
+    # K = number of groups to split into
+    # k = 10
+    # chunk_size = len(s)/k
+    # groups = []
+    # # split, sort, and merge
+    # for j in range(k):
+    #     groups.append[np.sort(suffixes[j*chunk_size:(j + 1)*chunk_size])]
 
-    sorted_indices = np.argsort(suffixes)
+    # sorted_indices = []
+
+    # # Try radix sort
+
+    # while groups:
+    #     c = np.concatenate(groups.pop(), groups.pop())
+    #     c = np.sort(c, kind="mergesort")
+
+    sorted_indices = np.argsort(suffixes, kind='mergesort') # supposedly uses radix sort under the hood
 
     return sorted_indices.tolist()
 
@@ -236,20 +253,29 @@ class Aligner:
         # Making a set of isoforms to represent transcriptome. TODO: could be a hash table
         self._isoforms = {}
         # Iterate through all genes
+        print("iterating thru genes")
         for gene in known_genes:
             # Iterate through all isoforms for each gene
+            print("Gene: ", gene.id)
             for isoform in gene.isoforms:
                 # Build isoform from individual exons
                 full_isoform = ''
                 for exon in isoform.exons: # If ordered, ok. if not, need to make sure
                     full_isoform += genome_sequence[exon.start:exon.end]
+                full_isoform += '$'
+                
                 # Find SA, M, and OCC of the isoform
+                print("    getting suffix array")
+                start_time = time.time()
                 sa = get_suffix_array(full_isoform)
+                print("    --- %s seconds ---" % (time.time() - start_time))
+                print("    suffix array: ", sa)
                 self._isoforms[isoform.id] = [get_bwt(full_isoform, sa), sa,
                                                 get_M(full_isoform), get_occ(full_isoform), 
                                                 full_isoform, isoform]
                     
         # Build SA, M, OCC for whole genome
+        print("building sa, m, occ, bwt for whole genomes")
         self._sa = get_suffix_array(genome_sequence)
         self._bwt = get_bwt(genome_sequence, self._sa)
         self._m = get_M(genome_sequence)
