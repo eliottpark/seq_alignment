@@ -15,6 +15,7 @@ import sys # DO NOT EDIT THIS
 import numpy as np
 import time
 
+from pprint import pprint
 from shared import *
 
 ALPHABET = [TERMINATOR] + BASES
@@ -38,10 +39,6 @@ def get_suffix_array(s):
     #     suffixes[s[i:]] = i
 
     # sorted_indices = [suffixes[x] for x in sorted(suffixes)]
-
-    suffixes = []
-    for i in range(len(s)):
-        suffixes = np.append(suffixes, s[i:])
     
     # K = number of groups to split into
     # k = 10
@@ -59,9 +56,129 @@ def get_suffix_array(s):
     #     c = np.concatenate(groups.pop(), groups.pop())
     #     c = np.sort(c, kind="mergesort")
 
-    sorted_indices = np.argsort(suffixes, kind='mergesort') # supposedly uses radix sort under the hood
+    # Naive approach ##########################################
+    # suffixes = []
+    # for i in range(len(s)):
+    #     suffixes = np.append(suffixes, s[i:])
+    
+    # sorted_indices = np.argsort(suffixes, kind='mergesort') # supposedly uses radix sort under the hood
 
-    return sorted_indices.tolist()
+    # Radix sort with buckets of len = k #######################
+    k = 49
+    r = 20
+    suffixes = {}
+    str_len = len(s)
+    # Construct dictionary that represents buckets defined by kth prefix of each suffix
+    print("str_len: ",str_len)
+    for i in range(str_len):
+        if s[i:i + k] in suffixes.keys():
+            suffixes[s[i:i + k]] += [(i, s[i + k:])]
+        else:
+            suffixes[s[i:i + k]] = [(i, s[i + k:])]
+    
+    print("suffix len: ", len(suffixes))
+    sorted_suffixes = k_radix_sort(suffixes, k, r)
+
+    # pprint(sorted_suffixes)
+    sout = [0 for _ in range(str_len)]
+    print("str_len: ", len(sout))
+    for i in range(str_len):
+        sout[i] = sorted_suffixes[i] 
+
+    print("sa len: ", len(sout))
+    return sout
+
+def k_radix_sort(suffixes, k, r):
+    """
+    Radix sort according to the kth prefix of each suffix.
+
+    suffixes: a dictionary of suffixes {[:k] prefix: (index in original string, [k:] suffix)}
+    k: size of prefix
+    r: recursion depth
+
+    Returns a sorted dictionary of suffixes {relative order of suffix: index in original string}
+    """
+    # Sort dictionary by keys and replace by order 
+    # sorted_keys = sorted(suffixes.keys())
+    for i, key in enumerate(sorted(suffixes.keys())):
+        suffixes[i] = suffixes.pop(key)
+
+
+    outer_suffixes = {}
+    total_suffixes = 0
+    # Recurse if there are more than one strings in a bucket
+    for i in range(len(suffixes)):
+        # if r == 20 and i < 20:
+            # print("outer suffixes len  at i = {}: ".format(i), len(outer_suffixes))
+        # print("\ni: ", i) 
+        if len(suffixes[i]) > 1 and r > 0:
+            inner_count = 0
+            recurse_suffix = {}
+            # Create suffix buckets from inner pairs
+            for pair in suffixes[i]:
+                total_suffixes += 1
+                # print("\npair: ", pair)
+                inner_count += 1
+                s = pair[1]
+                if s[i:i + k] in recurse_suffix.keys():
+                    recurse_suffix[s[i:i + k]] += [(pair[0], s[i + k:])]
+                else:
+                    recurse_suffix[s[i:i + k]] = [(pair[0], s[i + k:])]
+            # if r == 20 and i < 20:
+                # print("    inner count: ", inner_count)
+                # print("    recurse suf len: ", len(recurse_suffix))
+            # Return sorted suffix dictionary
+            sorted_suffixes = k_radix_sort(recurse_suffix, k, r-1)
+            # if r == 20 and i < 20:
+                # print("    sorted_suf len: ", len(sorted_suffixes))
+            # Correct dictionary keys after index i to account for order of new suffixes
+            delta = len(sorted_suffixes)
+            # if r == 20 and i < 20:
+            #     pprint(outer_suffixes)
+            # print("sorted suffixes:", suffixes)
+            outer_suffixes = {(key + delta - 1 if key > i else key): v for key, v in outer_suffixes.items()}
+            # Adjust key pairs in newly sorted dictionary
+            sorted_suffixes = { key + i: v for key, v in sorted_suffixes.items()}
+            outer_suffixes.update(sorted_suffixes)
+            # if r == 20 and i < 20:
+            #     pprint(sorted_suffixes)
+            #     pprint(outer_suffixes)
+            
+        else:
+            outer_suffixes[i] = suffixes[i][0][0]
+            total_suffixes += 1
+    
+    # if r == 20:
+        # print("total suffixes: ", total_suffixes)
+    return outer_suffixes
+    
+    # # Recurse if there are more than one strings in a bucket
+    # for i, key in enumerate(sorted(suffixes.keys())):
+    #     if len(suffixes[key]) > 1:
+    #         recurse_suffix = {}
+    #         # Create suffix buckets from inner pairs
+    #         for pair in suffixes[key]:
+    #             s = pair[1]
+    #             if s[i:i + k] in recurse_suffix.keys():
+    #                 recurse_suffix[s[i:i + k]] += [(i, s[i + k:])]
+    #             else:
+    #                 recurse_suffix[s[i:i + k]] = [(i, s[i + k:])]
+    #         # Return sorted suffix dictionary
+    #         sorted_suffixes = k_radix_sort(recurse_suffix, k)
+    #         # Correct dictionary keys after index i to account for order of new suffixes
+    #         delta = len(sorted_suffixes)
+    #         print("\n\ni: ", i)
+    #         print(suffixes)
+    #         suffixes = { (j + delta if j > i else j): v for j, v in suffixes.items()}
+    #         # Adjust key pairs in newly sorted dictionary
+    #         sorted_suffixes = { j + i: v for j, v in sorted_suffixes.items()}
+    #         suffixes.update(sorted_suffixes)
+    #     else:
+    #         suffixes[key] = suffixes[key][0]
+    
+    # # Sort dictionary by keys and replace by order 
+    # for i, key in enumerate(sorted(suffixes.keys())):
+    #     suffixes[i] = suffixes.pop(key)
 
 def get_bwt(s, sa):
     """
@@ -263,13 +380,17 @@ class Aligner:
                 for exon in isoform.exons: # If ordered, ok. if not, need to make sure
                     full_isoform += genome_sequence[exon.start:exon.end]
                 full_isoform += '$'
+                print("full isoform len: ", len(full_isoform))
+                print("isoform id: ", isoform.id)
+                if isoform.id == 'ENST00000475864':
+                    print(full_isoform)
                 
                 # Find SA, M, and OCC of the isoform
                 print("    getting suffix array")
                 start_time = time.time()
                 sa = get_suffix_array(full_isoform)
                 print("    --- %s seconds ---" % (time.time() - start_time))
-                print("    suffix array: ", sa)
+                # print("    suffix array: ", sa)
                 self._isoforms[isoform.id] = [get_bwt(full_isoform, sa), sa,
                                                 get_M(full_isoform), get_occ(full_isoform), 
                                                 full_isoform, isoform]
