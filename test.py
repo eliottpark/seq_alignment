@@ -9,6 +9,7 @@ import time
 # import unittest
 
 from pprint import pprint
+from itertools import zip_longest, islice
 
 from shared import *
 from project import *
@@ -84,8 +85,30 @@ def test_init(sequence, genes):
     start_time = time.time()
     aligner = Aligner(sequence, genes)
     print("--- %s seconds ---" % (time.time() - start_time))
+    
+    return aligner
 
-    # Test isoforms, etc.
+def test_greedy(aligner, read_sequence):
+    # Test align time
+    start_time = time.time()
+
+    isoform_id = list(aligner._isoforms.keys())[0]
+    isoform = aligner._isoforms[isoform_id]
+    m, occ =  isoform[2], isoform[3]
+    locations, num_mismatches = aligner.greedy_inexact_alignment(read_sequence, m, occ, isoform_id)
+    print("\nlocations: ", locations, "\nnum mismatches: ", num_mismatches)
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+
+def test_exact_matches(p, s):
+    sa = get_suffix_array(s)
+    L = get_bwt(s, sa)
+    F = get_F(L)
+    M = get_M(F)
+    occ = get_occ(L)
+    print("\ntesting exact suffix matches")
+    locations = exact_suffix_matches(p, M, occ)
+    print("locations: ", locations)
 
 
 def main():
@@ -108,10 +131,15 @@ def main():
     print("--- %s seconds ---" % (time.time() - start_time))
     # print("suffix array len, max: ", len(suffix_array), max(suffix_array))
 
+    dummy_genome = "AAAATGACATT$"
+
     print("\nTesting init function")
-    # test_init(genome, genes)
+    aligner = test_init(genome, genes)
 
+    print("\nTesting greedy: ")
+    # test_greedy(aligner, "GCAA")
 
+    test_exact_matches("GGGATG","AAAATGACATTAAAATGACATTAAAATGACATTAAAATGACATTAAAATGACATTAAAAATTGGGAC$")
     
 
 if __name__ == "__main__":
