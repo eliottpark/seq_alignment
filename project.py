@@ -616,12 +616,39 @@ class Aligner:
         l = len(read_sequence)
         n = l / 4
         i = 0
-        reads = []
+        seeds = []
         while i < l:
             if i + n < l:
-                reads.append(read_sequence[i:i + n])
+                seeds.append(read_sequence[i:i + n])
             else:
-                reads.append(read_sequence[i:l])
+                seeds.append(read_sequence[i:l])
+
+        # Aligning the seeds against the genome.
+        alignments = []
+        for seed in seeds:
+            alignments.append(self.greedy_inexact_alignment(seed, self._m, self._occ))
+
+        # Making sure that they are in the right order, need intron size range.
+        MIN_INTRON_SIZE = 20
+        MAX_INTRON_SIZE = 10000
+
+
+        for i in range(0, len(alignments)):
+            for j in range(i + 1, len(alignments)):
+                # Making sure it's the difference between the end of the first and beginning of second.
+                diff = alignments[j][0] - alignments[i][0] + len(seeds[i])
+                # Doing this accounts for the seeds being in the necessary order.
+                if diff > MIN_INTRON_SIZE and diff < MAX_INTRON_SIZE:
+                    # Need to figure out the ID stuff --> do we need to make new isoform?
+                    exon1 = genome_sequence[alignments[i][0] - (l - len(seeds[i])):alignments[i][0] + len(seeds[i])]
+                    exon2 = genome_sequence[alignments[j[0]]:alignments[j[0]] + l]
+                    isoform_string = exon1 + exon2
+                    # Now trying to align read to this new isoform.
+                    val = self.greedy_inexact_alignment(read_sequence, get_m(isoform_string), get_occ(isoform_string))
+                    if val is not None:
+                        return val
+
+        
 
         # Making offset seeds in order to find all unknown exons.
         i = 6
