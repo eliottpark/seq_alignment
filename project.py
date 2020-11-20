@@ -42,7 +42,7 @@ def get_suffix_array(s):
     [8, 7, 5, 3, 1, 6, 4, 0, 2]
     """
     k = 100
-    r = 4
+    r = 2
     suffixes = {}
     str_len = len(s)
     # Construct dictionary that represents buckets defined by kth prefix of each suffix
@@ -152,8 +152,6 @@ def k_radix_sort(s, suffixes, k, r):
             outer_suffixes.append(suffixes.pop(i)[0])
     
     suffixes.clear()
-
-    # gc.collect()
 
     return outer_suffixes
     
@@ -349,17 +347,25 @@ class Aligner:
         overall_start_time = time.time()
         # Making a set of isoforms to represent transcriptome. TODO: could be a hash table
         self._isoforms = {}
+        self._transcriptome = ''
         # Iterate through all genes
         print("iterating thru genes")
+        transcriptome_index = 0
         for gene in known_genes:
             # Iterate through all isoforms for each gene
             # print("Gene: ", gene.id)
             for isoform in gene.isoforms:
-                # Build isoform from individual exons
-                full_isoform = ''
+                start = transcriptome_index
+                # # Build isoform from individual exons
+                # full_isoform = ''
+                # for exon in isoform.exons: # If ordered, ok. if not, need to make sure
+                #     full_isoform += genome_sequence[exon.start:exon.end]
+                # full_isoform += '$'
+                # Add to full transcriptome with delimiter
                 for exon in isoform.exons: # If ordered, ok. if not, need to make sure
-                    full_isoform += genome_sequence[exon.start:exon.end]
-                full_isoform += '$'
+                    self._transcriptome += genome_sequence[exon.start:exon.end]
+                self._transcriptome += '$'
+                transcriptome_index = len(self._transcriptome) - transcriptome_index
                 # print("isoform id: ", isoform.id)
                 # print("    full isoform len: ", len(full_isoform))
                 # if isoform.id == "ENST00000475864":
@@ -367,8 +373,8 @@ class Aligner:
                 
                 # Find SA, M, and OCC of the isoform
                 # print("    getting suffix array")
-                start_time = time.time()
-                sa = get_suffix_array(full_isoform)
+                # start_time = time.time()
+                # sa = get_suffix_array(full_isoform)
                 # print("ours:    --- %s seconds ---" % (time.time() - start_time))
                 # start_time = time.time()
                 # sa_theirs = sufarray.SufArray(full_isoform)
@@ -376,13 +382,34 @@ class Aligner:
                 # if (sa != sa_theirs.get_array()):
                 #     raise KeyError("Wrong suffix array")
                 # print("Match? ", sa == sa_theirs.get_array())
-                self._isoforms[isoform.id] = [get_bwt(full_isoform, sa), # 0
-                                                sa,                      # 1
-                                                get_M(full_isoform),     # 2
-                                                get_occ(full_isoform),   # 3
-                                                full_isoform,            # 4
-                                                isoform]                 # 5
+                # self._isoforms[isoform.id] = [get_bwt(full_isoform, sa), # 0
+                #                                 sa,                      # 1
+                #                                 get_M(full_isoform),     # 2
+                #                                 get_occ(full_isoform),   # 3
+                #                                 full_isoform,            # 4
+                #                                 isoform]                 # 5
+
+                self._isoforms[isoform.id] = [isoform,                     # 0 - full isoform object
+                                              start,                       # 1 - start index
+                                              transcriptome_index - 1      # 2 - end index
+                                             ]                 
+
+        # FM Index for Transcriptome
+        print("getting sa for full transcriptome")
+        start_time = time.time()
+        self._t_sa = get_suffix_array(self._transcriptome)
+        print("    --- %s seconds ---" % (time.time() - start_time))
+        print("getting bwt for full transcriptome")
+        self._t_bwt = get_bwt(self._transcriptome, self._t_sa)
+        print("    --- %s seconds ---" % (time.time() - start_time))
+        print("getting m array for full transcriptome")
+        self._t_m = get_M(self._transcriptome)
+        print("    --- %s seconds ---" % (time.time() - start_time))
+        print("getting occ array for full transcriptome")
+        self._t_occ = get_occ(self._transcriptome)
+        print("    --- %s seconds ---" % (time.time() - start_time))
                     
+        print("isoforms:    --- %s seconds ---" % (time.time() - overall_start_time))
         # Build SA, M, OCC for whole genome
         print("building sa, m, occ, bwt for whole genomes")
         start_time = time.time()
