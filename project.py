@@ -17,6 +17,7 @@ import zlib
 import numpy as np
 import heapq
 import time
+import random
 # import sufarray
 
 # from pysuffixarray.core import SuffixArray
@@ -326,7 +327,7 @@ def exact_suffix_matches(p, M, occ):
     while i >= 0:
         temp_sp = M[p[i]] + occ[p[i]][sp - 1]
         temp_ep = M[p[i]] + occ[p[i]][ep] - 1
-        if temp_sp >= temp_ep:
+        if temp_sp > temp_ep:
             break
         sp, ep = temp_sp, temp_ep
         i -= 1
@@ -424,7 +425,7 @@ class Aligner:
         start_time = time.time()
         print("bwt:    --- %s seconds ---" % (time.time() - start_time))
         self._bwt = get_bwt(genome_sequence, self._sa)
-        self._m = get_M(genome_sequence)
+        self._m = get_M(get_F(self._bwt))
         self._occ = get_occ(genome_sequence)
         print("bwt, m, occ:    --- %s seconds ---" % (time.time() - start_time))
         self._genome_seq = genome_sequence
@@ -578,25 +579,75 @@ class Aligner:
         array w/isoform id of every index in transcriptome
         """
 
-        match = exact_suffix_matches(p, M, occ)
-        query_length = len(p)
-        if match[1] == query_length:
-            if isoform_id is not None:
-                r_match_index = self._isoforms[isoform_id][1][match[0][1]]
-                return (r_match_index, num_mismatches)
-        elif num_mismatches == 0:
-            return (None, None)
-        else:
-            q_match_index = query_length - match[1]
-            for k in range(match[0][0], match[0][1]):
-                if isoform_id is not None:
-                    r_match_index = self._isoforms[isoform_id][1][k]
-                    p[q_match_index] = self._isoforms[isoform_id][4][r_match_index]
+        # match = exact_suffix_matches(p, M, occ)
+        # query_length = len(p)
+        # if match[1] == query_length:
+        #     if isoform_id is not None:
+        #         r_match_index = self._isoforms[isoform_id][1][match[0][1]]
+        #         return (r_match_index, num_mismatches)
+        #     else:
+        #         r_match_index = self._sa[match[0][0]]
+        #         return (r_match_index, num_mismatches)
+        # elif num_mismatches == 6:
+        #     return (None, None)
+        # else:
+        #     match = self.helper(p, M, occ, num_mismatches)
+
+
+        #     q_match_index = query_length - match[1]
+        #     # Iterate through all matches and find the best one.
+        #     inner_matches = []
+        #     for k in range(match[0][0], match[0][1]):
+        #         if isoform_id is not None:
+        #             r_match_index = self._isoforms[isoform_id][1][k]
+        #             p[q_match_index] = self._isoforms[isoform_id][4][r_match_index]
+        #         else:
+        #             r_match_index = self._sa[k]
+        #             p = p[:q_match_index - 1] + self._genome_seq[r_match_index] + p[q_match_index + 1:]
+        #         # This is supposed to
+        #         inner_matches.append(self.recursive_inexact_alignment(p, M, occ, num_mismatches + 1, isoform_id))
+        #     best = (None, 7)
+        #     for match in inner_matches:
+        #         if match[1] < best[1]:
+        #             best = match
+        #     return best
+            # return self.recursive_inexact_alignment(p, M, occ, num_mismatches + 1, isoform_id)
+
+        # Code from above
+        iterator = iter(M.keys())
+        r = {} # Dictionary (index, [bases tried at index])
+        nucleotides = ['A', 'C', 'T', 'G']
+        while True:
+            char = next(iterator)
+            if char == p[-1]:
+                sp = M[char]
+                try:
+                    ep = M[next(iterator)] - 1
+                except StopIteration:
+                    ep = len(occ[char]) - 1
+                break
+        if ep < sp: # Need to fix this.
+            return ((None), 0)
+        i = len(p) - 2
+        while i >= 0:
+            print(p[i])
+            temp_sp = M[p[i]] + occ[p[i]][sp - 1]
+            temp_ep = M[p[i]] + occ[p[i]][ep] - 1
+            while temp_sp > temp_ep:
+                if i in r.keys():
+                    r[i].append(p[i])
                 else:
-                    r_match_index = self._sa[k]
-                    p[q_match_index] = self._genome_seq
-            # p[q_match_index] = 
-            return self.recursive_inexact_alignment(p, M, occ, num_mismatches - 1, isoform_id)
+                    r[i] = [p[i]]
+                    num_mismatches += 1
+                if len(r[i]) == 4:
+                    return (None, None)
+                else:
+                    p = p[:i] + str(random.choice(list(set(nucleotides) - set(r[i])))) + p[i+1:]
+                    temp_sp = M[p[i]] + occ[p[i]][sp - 1]
+                    temp_ep = M[p[i]] + occ[p[i]][ep] - 1
+            sp, ep = temp_sp, temp_ep
+            i -= 1
+        return ((sp, ep + 1), num_mismatches)
 
     def align_to_isoforms(self, read_sequence):
         """
@@ -699,7 +750,7 @@ class Aligner:
         matches = []
         # Retrieve the best inexact alignment to the genome
         # locations = (<range of matches in suffix array>, <length of longest match>)
-        locations, num_mismatches = self.greedy_inexact_alignment(read_sequence, self._m, self._occ)
+        locations, num_mismatches = self.recursive_inexact_alignment(read_sequence, self._m, self._occ)
 
         if locations:
             matches.append((0, self._sa[locations[0][0]]))

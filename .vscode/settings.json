@@ -1,4 +1,4 @@
 {
     "python.condaPath": "/Users/eliottpark/opt/anaconda3",
-    "python.pythonPath": "/Users/eliottpark/opt/anaconda3/bin/python"
+    "python.pythonPath": "/opt/miniconda3/bin/python"
 }
