@@ -12,17 +12,22 @@
 """
 
 import sys # DO NOT EDIT THIS
+import gc
+import zlib
 import numpy as np
 import heapq
 import time
-import sufarray
+# import sufarray
 
-from pysuffixarray.core import SuffixArray
-from pprint import pprint
+# from pysuffixarray.core import SuffixArray
+# from pprint import pprint
+# from memory_profiler import profile
+
 from shared import *
 
 ALPHABET = [TERMINATOR] + BASES
 
+# @profile
 def get_suffix_array(s):
     """
     Naive implementation of suffix array generation (0-indexed). You do not have to implement the
@@ -36,25 +41,31 @@ def get_suffix_array(s):
     >>> get_suffix_array('GATAGACA$')
     [8, 7, 5, 3, 1, 6, 4, 0, 2]
     """
-    k = 250
-    r = 7
+    k = 100
+    r = 4
     suffixes = {}
     str_len = len(s)
     # Construct dictionary that represents buckets defined by kth prefix of each suffix
     for i in range(str_len):
         # # Only split if the bucket will store data
-        if s[i:i + k] in suffixes.keys():
-            suffixes[s[i:i + k]] += [(i, s[i + k:])]
+        prefix = s[i:i + k]
+        if prefix in suffixes.keys():
+            # suffixes[prefix] += [(i, zlib.compress(bytes(suffix, encoding='utf-8')))]
+            suffixes[prefix] += [i]
         else:
-            suffixes[s[i:i + k]] = [(i, s[i + k:])]
+            # suffixes[prefix] = [(i, zlib.compress(bytes(suffix, encoding='utf-8')))]
+             suffixes[prefix] = [i]
 
     # Sort long suffixes
-    suffix_len = len(suffixes)
-    sorted_suffixes = k_radix_sort(suffixes, k, r)
+    sorted_suffixes = k_radix_sort(s, suffixes, k, r)
+
+    suffixes.clear()
+    # gc.collect()
 
     return sorted_suffixes
 
-def k_radix_sort(suffixes, k, r):
+# @profile
+def k_radix_sort(s, suffixes, k, r):
     """
     Radix sort according to the kth prefix of each suffix.
 
@@ -68,7 +79,7 @@ def k_radix_sort(suffixes, k, r):
     s_len = len(suffixes)
     for i, key in enumerate(sorted(suffixes.keys())):
         suffixes[i] = suffixes.pop(key) # switch keys from kth prefix to index/order
-    
+
     outer_suffixes = []
     # offset = 0
     # Recurse if there are more than one strings in a bucket
@@ -76,52 +87,74 @@ def k_radix_sort(suffixes, k, r):
         if len(suffixes[i]) > 1 and r > 0:
             inner_count = 0
             recurse_suffix = {}
-            short_suffix = {}
+            # short_suffix = {}
             j = 0
             # Create suffix buckets from inner pairs
-            for pair in suffixes.pop(i):
+            for index in suffixes.pop(i):
                 inner_count += 1
-                s = pair[1] # Rest of the string available.
+                # s = str(zlib.decompress(pair[1])).lstrip('b\'').rstrip('\'') # Rest of the string available.
+                suf = s[index + k*r:]
+                # if pair[0] in missing:
+                #     print("missing")
                 # If length is greater than k, we want to recurse 
-                if len(s) > k:
-                    if s[:k] in recurse_suffix.keys():
-                        recurse_suffix[s[:k]] += [(pair[0], s[k:])]
-                    else:
-                        recurse_suffix[s[:k]] = [(pair[0], s[k:])]
-                # Otherwise, just sort directly on what we have
+                # if len(suf) > k:
+                pre = s[:k]
+                # if pair[0] in missing:
+                #     print("missing")
+                if pre in recurse_suffix.keys():
+                    # recurse_suffix[prefix] += [(pair[0], zlib.compress(bytes(suffix, encoding='utf-8')))]
+                    recurse_suffix[pre] += [index]
                 else:
-                    short_suffix[pair[1]] = pair[0]
+                    # recurse_suffix[prefix] = [(pair[0], zlib.compress(bytes(suffix, encoding='utf-8')))]
+                    recurse_suffix[pre] = [index]
+                # Otherwise, just sort directly on what we have
+                # else:
+                #     short_suffix[pair[1]] = pair[0]
+                    # if pair[0] in missing:
+                    #     print("missing")
             
-            ##### Sort and add in short suffixes #####
-            for j, key in enumerate(sorted(short_suffix.keys())):
-                short_suffix[i + j] = short_suffix.pop(key)
-            # Add in short suffixes to outer suffixes
-            for key in short_suffix.keys():
-                if key in outer_suffixes.keys():
-                    raise KeyError("must add unique dict elements")
-            outer_suffixes += list(short_suffix.values())
+            # if short_suffix:
+            #     ##### Sort and add in short suffixes #####
+            #     for j, key in enumerate(sorted(short_suffix.keys())):
+            #         short_suffix[i + j] = short_suffix.pop(key)
+            #     # Add in short suffixes to outer suffixes
+            #     # for key in short_suffix.keys():
+            #         # if key in outer_suffixes.keys():
+            #         #     raise KeyError("must add unique dict elements")
+            #     outer_suffixes += list(short_suffix.values())
             
             ##### Sort and add in recursive suffixes #####
-            sorted_suffixes = k_radix_sort(recurse_suffix, k, r-1)
+            sorted_suffixes = k_radix_sort(s, recurse_suffix, k, r-1)
             outer_suffixes += sorted_suffixes
+            recurse_suffix.clear()
+            # short_suffix.clear()
 
         elif len(suffixes[i]) > 1:
             # Sort the bucket directly at maximum recursion depth
             max_r_suffixes = {}
             # Turn list of tuples (index in original string, remainder of string) into sorted dict
-            for pair in suffixes[i]:
-                max_r_suffixes[pair[1]] = pair[0]
+            for index in suffixes.pop(i):
+                # s = str(zlib.decompress(pair[1])).lstrip('b\'').rstrip('\'') 
+                suf = s[index + k*r:]
+                max_r_suffixes[suf] = index
+                # if pair[0] in missing:
+                #     print("missing")
                 # offset += 1
             # Sort by keys, and reassign keys to be overall index
             for j, key in enumerate(sorted(max_r_suffixes.keys())):
                 max_r_suffixes[i + j] = max_r_suffixes.pop(key)
             # Combine with outer dictionary
             outer_suffixes += list(max_r_suffixes.values())
+            max_r_suffixes.clear()
 
         else:
             # Append suffix index to output array
-            outer_suffixes.append(suffixes.pop(i)[0][0])
+            outer_suffixes.append(suffixes.pop(i)[0])
     
+    suffixes.clear()
+
+    # gc.collect()
+
     return outer_suffixes
     
 
@@ -300,6 +333,7 @@ MIN_INTRON_SIZE = 20
 MAX_INTRON_SIZE = 10000
 
 class Aligner:
+    # @profile
     def __init__(self, genome_sequence, known_genes):
         """
         Initializes the aligner. Do all time intensive set up here. i.e. build suffix array.
@@ -328,7 +362,7 @@ class Aligner:
                 full_isoform += '$'
                 # print("isoform id: ", isoform.id)
                 # print("    full isoform len: ", len(full_isoform))
-                # if isoform.id == "ENST00000433210":
+                # if isoform.id == "ENST00000475864":
                 #     print(full_isoform)
                 
                 # Find SA, M, and OCC of the isoform
@@ -350,18 +384,18 @@ class Aligner:
                                                 isoform]                 # 5
                     
         # Build SA, M, OCC for whole genome
-        # print("building sa, m, occ, bwt for whole genomes")
-        # start_time = time.time()
-        # self._sa = get_suffix_array(genome_sequence)
-        # print("sa:    --- %s seconds ---" % (time.time() - start_time))
-        # start_time = time.time()
-        # print("bwt:    --- %s seconds ---" % (time.time() - start_time))
-        # self._bwt = get_bwt(genome_sequence, self._sa)
-        # self._m = get_M(genome_sequence)
-        # self._occ = get_occ(genome_sequence)
-        # print("bwt, m, occ:    --- %s seconds ---" % (time.time() - start_time))
-        # self._genome_seq = genome_sequence
-        # print("full init:    --- %s seconds ---" % (time.time() - overall_start_time))
+        print("building sa, m, occ, bwt for whole genomes")
+        start_time = time.time()
+        self._sa = get_suffix_array(genome_sequence)
+        print("sa:    --- %s seconds ---" % (time.time() - start_time))
+        start_time = time.time()
+        print("bwt:    --- %s seconds ---" % (time.time() - start_time))
+        self._bwt = get_bwt(genome_sequence, self._sa)
+        self._m = get_M(genome_sequence)
+        self._occ = get_occ(genome_sequence)
+        print("bwt, m, occ:    --- %s seconds ---" % (time.time() - start_time))
+        self._genome_seq = genome_sequence
+        print("full init:    --- %s seconds ---" % (time.time() - overall_start_time))
             
         # To make transcriptome: for each known_gene, find isoform; for each isoform, find exons; concatenate together.
         # Build suffix array, M array, Occ array.
@@ -378,6 +412,9 @@ class Aligner:
 
         Returns an alignment to reference text if one can be found with less than MAX_NUM_MISMATCHES
         in the form (<index of match in reference text>, <number of mismatches>)
+
+        Make entire transcriptome --> concat w delimiters --> keep track of limits within the isoform 
+        array w/isoform id of every index in transcriptome
         """
         num_mismatches = 0
         longest_match_length = 0
@@ -491,6 +528,42 @@ class Aligner:
 
         return None, None
 
+    def recursive_inexact_alignment(self, p, M, occ, num_mismatches, isoform_id=None):
+        """
+        Run a greedy inexact alignment algorithm to determine an alignment to the reference text
+        with less than or equal to MAX_NUM_MISMATCHES. 
+
+        p: Query string
+        M: M array of the reference text
+        occ: occ array of the reference text
+        isoform_id: Isoform id to refer
+
+        Returns an alignment to reference text if one can be found with less than MAX_NUM_MISMATCHES
+        in the form (<index of match in reference text>, <number of mismatches>)
+
+        Make entire transcriptome --> concat w delimiters --> keep track of limits within the isoform 
+        array w/isoform id of every index in transcriptome
+        """
+
+        match = exact_suffix_matches(p, M, occ)
+        query_length = len(p)
+        if match[1] == query_length:
+            if isoform_id is not None:
+                r_match_index = self._isoforms[isoform_id][1][match[0][1]]
+                return (r_match_index, num_mismatches)
+        elif num_mismatches == 0:
+            return (None, None)
+        else:
+            q_match_index = query_length - match[1]
+            for k in range(match[0][0], match[0][1]):
+                if isoform_id is not None:
+                    r_match_index = self._isoforms[isoform_id][1][k]
+                    p[q_match_index] = self._isoforms[isoform_id][4][r_match_index]
+                else:
+                    r_match_index = self._sa[k]
+                    p[q_match_index] = self._genome_seq
+            # p[q_match_index] = 
+            return self.recursive_inexact_alignment(p, M, occ, num_mismatches - 1, isoform_id)
 
     def align_to_isoforms(self, read_sequence):
         """
@@ -615,7 +688,7 @@ class Aligner:
         # Making the seeds.
         l = len(read_sequence)
         n = l / 4
-        i = 0
+        i = 0        
         seeds = []
         while i < l:
             if i + n < l:
