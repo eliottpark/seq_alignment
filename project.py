@@ -41,7 +41,7 @@ def get_suffix_array(s):
     >>> get_suffix_array('GATAGACA$')
     [8, 7, 5, 3, 1, 6, 4, 0, 2]
     """
-    k = 100
+    k = 280
     r = 2
     suffixes = {}
     str_len = len(s)
@@ -55,6 +55,8 @@ def get_suffix_array(s):
         else:
             # suffixes[prefix] = [(i, zlib.compress(bytes(suffix, encoding='utf-8')))]
              suffixes[prefix] = [i]
+        if i % 500000 == 0:
+            print("slice ", i)
 
     # Sort long suffixes
     sorted_suffixes = k_radix_sort(s, suffixes, k, r)
@@ -75,15 +77,19 @@ def k_radix_sort(s, suffixes, k, r):
 
     Returns a sorted dictionary of suffixes {relative order of suffix: index in original string}
     """
+    # print("r = ", r)
     # Sort dictionary by keys and replace by order 
     s_len = len(suffixes)
     for i, key in enumerate(sorted(suffixes.keys())):
         suffixes[i] = suffixes.pop(key) # switch keys from kth prefix to index/order
+    # print(suffixes)
 
     outer_suffixes = []
     # offset = 0
     # Recurse if there are more than one strings in a bucket
     for i in range(len(suffixes)):
+        if i % 10000 == 0 and i != 0:
+            print("bucket ", i)
         if len(suffixes[i]) > 1 and r > 0:
             inner_count = 0
             recurse_suffix = {}
@@ -403,10 +409,10 @@ class Aligner:
         self._t_bwt = get_bwt(self._transcriptome, self._t_sa)
         print("    --- %s seconds ---" % (time.time() - start_time))
         print("getting m array for full transcriptome")
-        self._t_m = get_M(self._transcriptome)
+        self._t_m = get_M(get_F(self._t_bwt))
         print("    --- %s seconds ---" % (time.time() - start_time))
         print("getting occ array for full transcriptome")
-        self._t_occ = get_occ(self._transcriptome)
+        self._t_occ = get_occ(self._t_bwt)
         print("    --- %s seconds ---" % (time.time() - start_time))
                     
         print("isoforms:    --- %s seconds ---" % (time.time() - overall_start_time))
