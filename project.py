@@ -765,12 +765,12 @@ class Aligner:
             for i in range(0, len(alignments)):
                 for j in range(i + 1, len(alignments)):
                     # Making sure it's the difference between the end of the first and beginning of second.
-                    diff = sa[alignments[j][0][0]] - sa[alignments[i][0][0]] + len(seeds[i])
+                    diff = sa[alignments[j][0][0] - 1] - sa[alignments[i][0][0] - 1] + len(seeds[i])
                     # Doing this accounts for the seeds being in the necessary order.
                     if diff > MIN_INTRON_SIZE and diff < MAX_INTRON_SIZE:
                         # Need to figure out the ID stuff --> do we need to make new isoform?
-                        exon1 = genome[sa[alignments[i][0][0]] - (l - len(seeds[i])):sa[alignments[i][0][0]] + len(seeds[i])]
-                        exon2 = genome[sa[alignments[j][0][0]]:sa[alignments[j][0][0]] + l]
+                        exon1 = genome[sa[alignments[i][0][0] - 1] - (l - len(seeds[i])):sa[alignments[i][0][0] - 1] + len(seeds[i])]
+                        exon2 = genome[sa[alignments[j][0][0] - 1]:sa[alignments[j][0][0] - 1] + l]
                         isoform_string = exon1 + exon2
                         # Now trying to align read to this new isoform.
                         return self.recursive_inexact_alignment(read_sequence, get_M(isoform_string), get_occ(isoform_string), 0)
@@ -779,9 +779,9 @@ class Aligner:
         range_rev, num_mismatches_rev = exon_creator(read_sequence[::-1], self._genome_seq[::-1], self._m_r, self._occ_r, self._sa_r)
 
         if num_mismatches_for <= num_mismatches_rev:
-            location = self._t_sa[range_for[0]]
+            location = self._t_sa[range_for[0] - 1]
         else:
-            location = self._t_sa_r[range_rev[0]]
+            location = self._t_sa_r[range_rev[0] - 1]
         
         return (0, location, len(read_sequence))
 
