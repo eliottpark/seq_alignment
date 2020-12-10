@@ -12,8 +12,6 @@
 """
 
 import sys # DO NOT EDIT THIS
-import gc
-import zlib
 import numpy as np
 import heapq
 import time
@@ -42,28 +40,23 @@ def get_suffix_array(s):
     >>> get_suffix_array('GATAGACA$')
     [8, 7, 5, 3, 1, 6, 4, 0, 2]
     """
-    k = 280
+    k = 500
     r = 2
     suffixes = {}
     str_len = len(s)
     # Construct dictionary that represents buckets defined by kth prefix of each suffix
     for i in range(str_len):
-        # # Only split if the bucket will store data
+        # Only split if the bucket will store data
         prefix = s[i:i + k]
         if prefix in suffixes.keys():
-            # suffixes[prefix] += [(i, zlib.compress(bytes(suffix, encoding='utf-8')))]
             suffixes[prefix] += [i]
         else:
-            # suffixes[prefix] = [(i, zlib.compress(bytes(suffix, encoding='utf-8')))]
              suffixes[prefix] = [i]
-        if i % 500000 == 0:
-            print("slice ", i)
 
     # Sort long suffixes
     sorted_suffixes = k_radix_sort(s, suffixes, k, r)
 
     suffixes.clear()
-    # gc.collect()
 
     return sorted_suffixes
 
@@ -78,70 +71,40 @@ def k_radix_sort(s, suffixes, k, r):
 
     Returns a sorted dictionary of suffixes {relative order of suffix: index in original string}
     """
-    # print("r = ", r)
     # Sort dictionary by keys and replace by order 
     s_len = len(suffixes)
     for i, key in enumerate(sorted(suffixes.keys())):
         suffixes[i] = suffixes.pop(key) # switch keys from kth prefix to index/order
-    # print(suffixes)
 
     outer_suffixes = []
-    # offset = 0
     # Recurse if there are more than one strings in a bucket
     for i in range(len(suffixes)):
-        if i % 10000 == 0 and i != 0:
-            print("bucket ", i)
         if len(suffixes[i]) > 1 and r > 0:
             inner_count = 0
             recurse_suffix = {}
-            # short_suffix = {}
             j = 0
             # Create suffix buckets from inner pairs
             for index in suffixes.pop(i):
                 inner_count += 1
-                # s = str(zlib.decompress(pair[1])).lstrip('b\'').rstrip('\'') # Rest of the string available.
                 suf = s[index + k*r:]
-                # if pair[0] in missing:
-                #     print("missing")
                 # If length is greater than k, we want to recurse 
                 # if len(suf) > k:
                 pre = s[:k]
-                # if pair[0] in missing:
-                #     print("missing")
                 if pre in recurse_suffix.keys():
-                    # recurse_suffix[prefix] += [(pair[0], zlib.compress(bytes(suffix, encoding='utf-8')))]
                     recurse_suffix[pre] += [index]
                 else:
-                    # recurse_suffix[prefix] = [(pair[0], zlib.compress(bytes(suffix, encoding='utf-8')))]
                     recurse_suffix[pre] = [index]
-                # Otherwise, just sort directly on what we have
-                # else:
-                #     short_suffix[pair[1]] = pair[0]
-                    # if pair[0] in missing:
-                    #     print("missing")
-            
-            # if short_suffix:
-            #     ##### Sort and add in short suffixes #####
-            #     for j, key in enumerate(sorted(short_suffix.keys())):
-            #         short_suffix[i + j] = short_suffix.pop(key)
-            #     # Add in short suffixes to outer suffixes
-            #     # for key in short_suffix.keys():
-            #         # if key in outer_suffixes.keys():
-            #         #     raise KeyError("must add unique dict elements")
-            #     outer_suffixes += list(short_suffix.values())
             
             ##### Sort and add in recursive suffixes #####
             sorted_suffixes = k_radix_sort(s, recurse_suffix, k, r-1)
             outer_suffixes += sorted_suffixes
             recurse_suffix.clear()
-            # short_suffix.clear()
 
         elif len(suffixes[i]) > 1:
             # Sort the bucket directly at maximum recursion depth
             max_r_suffixes = {}
             # Turn list of tuples (index in original string, remainder of string) into sorted dict
             for index in suffixes.pop(i):
-                # s = str(zlib.decompress(pair[1])).lstrip('b\'').rstrip('\'') 
                 suf = s[index + k*r:]
                 max_r_suffixes[suf] = index
                 # if pair[0] in missing:
@@ -351,85 +314,52 @@ class Aligner:
                     so don't stress if you are close. Server is 1.25 times faster than the i7 CPU on my computer
 
         """
-        overall_start_time = time.time()
         # Making a set of isoforms to represent transcriptome. TODO: could be a hash table
         self._isoforms = {}
+        self._isoform_indices = {}
         self._transcriptome = ''
         # Iterate through all genes
-        print("iterating thru genes")
+        # print("iterating thru genes")
         transcriptome_index = 0
         for gene in known_genes:
             # Iterate through all isoforms for each gene
             # print("Gene: ", gene.id)
             for isoform in gene.isoforms:
-                start = transcriptome_index
-                # # Build isoform from individual exons
-                # full_isoform = ''
-                # for exon in isoform.exons: # If ordered, ok. if not, need to make sure
-                #     full_isoform += genome_sequence[exon.start:exon.end]
-                # full_isoform += '$'
+                start = transcriptome_index # start in transcripome string
                 # Add to full transcriptome with delimiter
+                q = len(self._transcriptome)
                 for exon in isoform.exons: # If ordered, ok. if not, need to make sure
                     self._transcriptome += genome_sequence[exon.start:exon.end]
                 self._transcriptome += '$'
-                transcriptome_index = len(self._transcriptome) - transcriptome_index
-                # print("isoform id: ", isoform.id)
-                # print("    full isoform len: ", len(full_isoform))
-                # if isoform.id == "ENST00000475864":
-                #     print(full_isoform)
-                
-                # Find SA, M, and OCC of the isoform
-                # print("    getting suffix array")
-                # start_time = time.time()
-                # sa = get_suffix_array(full_isoform)
-                # print("ours:    --- %s seconds ---" % (time.time() - start_time))
-                # start_time = time.time()
-                # sa_theirs = sufarray.SufArray(full_isoform)
-                # print("thiers:  --- %s seconds ---" % (time.time() - start_time))
-                # if (sa != sa_theirs.get_array()):
-                #     raise KeyError("Wrong suffix array")
-                # print("Match? ", sa == sa_theirs.get_array())
-                # self._isoforms[isoform.id] = [get_bwt(full_isoform, sa), # 0
-                #                                 sa,                      # 1
-                #                                 get_M(full_isoform),     # 2
-                #                                 get_occ(full_isoform),   # 3
-                #                                 full_isoform,            # 4
-                #                                 isoform]                 # 5
+                diff = len(self._transcriptome) - q
+                transcriptome_index += diff               
 
-                self._isoforms[isoform.id] = [isoform,                     # 0 - full isoform object
-                                              start,                       # 1 - start index
-                                              transcriptome_index - 1      # 2 - end index
-                                             ]                 
+                self._isoforms[isoform.id] = isoform                       # full isoform object
+                                              
+                self._isoform_indices[start] = [transcriptome_index - 1,   # 0 - end index in transcriptome string (at $)
+                                               isoform.id                  # 1 - isoform id
+                                               ]         
 
         # FM Index for Transcriptome
-        print("getting sa for full transcriptome")
-        start_time = time.time()
+        self._t_sa_r = get_suffix_array(self._transcriptome[::-1])
         self._t_sa = get_suffix_array(self._transcriptome)
-        print("    --- %s seconds ---" % (time.time() - start_time))
-        print("getting bwt for full transcriptome")
         self._t_bwt = get_bwt(self._transcriptome, self._t_sa)
-        print("    --- %s seconds ---" % (time.time() - start_time))
-        print("getting m array for full transcriptome")
+        self._t_bwt_r = get_bwt(self._transcriptome[::-1], self._t_sa_r)
         self._t_m = get_M(get_F(self._t_bwt))
-        print("    --- %s seconds ---" % (time.time() - start_time))
-        print("getting occ array for full transcriptome")
+        self._t_m_r = get_M(get_F(self._t_bwt_r))
         self._t_occ = get_occ(self._t_bwt)
-        print("    --- %s seconds ---" % (time.time() - start_time))
+        self._t_occ_r = get_occ(self._t_bwt_r)
                     
-        print("isoforms:    --- %s seconds ---" % (time.time() - overall_start_time))
         # Build SA, M, OCC for whole genome
-        print("building sa, m, occ, bwt for whole genomes")
-        start_time = time.time()
         self._sa = get_suffix_array(genome_sequence)
-        print("sa:    --- %s seconds ---" % (time.time() - start_time))
-        start_time = time.time()
-        print("bwt:    --- %s seconds ---" % (time.time() - start_time))
+        self._sa_r = get_suffix_array(genome_sequence[::-1])
         self._bwt = get_bwt(genome_sequence, self._sa)
+        self._bwt_r = get_bwt(genome_sequence[::-1], self._sa_r)
         self._m = get_M(get_F(self._bwt))
+        self._m_r = get_M(get_F(self._bwt_r))
         self._occ = get_occ(genome_sequence)
-        print("bwt, m, occ:    --- %s seconds ---" % (time.time() - start_time))
+        self._occ_r = get_occ(genome_sequence[::-1])
         self._genome_seq = genome_sequence
-        print("full init:    --- %s seconds ---" % (time.time() - overall_start_time))
             
         # To make transcriptome: for each known_gene, find isoform; for each isoform, find exons; concatenate together.
         # Build suffix array, M array, Occ array.
@@ -477,7 +407,7 @@ class Aligner:
         while num_mismatches < MAX_NUM_MISMATCHES:
             locations = exact_suffix_matches(query, M, occ)
             location_range, longest_match_len = locations[0], locations[1]
-            print("longest match len: ", locations)
+            # print("longest match len: ", locations)
 
             # If the match is the length of the query, return
             if longest_match_len == query_len:
@@ -529,7 +459,7 @@ class Aligner:
 
                 # Pop best option off stack and edit query
                 curr_best = heapq.heappop(choices)
-                print(curr_best)
+                # print(curr_best)
                 query_index, ref_index = curr_best[1][0], curr_best[1][1]
 
                 # Set query mismatch for longest match in reference text
@@ -540,7 +470,7 @@ class Aligner:
                     sub = self._genome_seq[ref_index - 1] # Set query mismatch to reference text value at corresponding index
                     query = query[:query_index - 1] + sub + query[query_index:]
                 
-                print("\nnew query: ", query)
+                # print("\nnew query: ", query)
 
                 # Save character substitution TODO may need to save immediately previous subbed index as well
                 subbed[num_mismatches] = sub
@@ -562,7 +492,7 @@ class Aligner:
 
         return None, None
 
-    def recursive_inexact_alignment(self, p, M, occ, num_mismatches, isoform_id=None):
+    def recursive_inexact_alignment(self, p, M, occ, num_mismatches=0, isoform_id=None):
         """
         Run a greedy inexact alignment algorithm to determine an alignment to the reference text
         with less than or equal to MAX_NUM_MISMATCHES. 
@@ -591,11 +521,11 @@ class Aligner:
                 except StopIteration:
                     ep = len(occ[char]) - 1
                 break
-        if ep < sp: # Need to fix this.
+        if ep < sp:
             return ((None), 0)
         i = len(p) - 2
-        while i >= 0:
-            print(p[i])
+        while i >= 0  and num_mismatches < MAX_NUM_MISMATCHES:
+            # print(p[i])
             temp_sp = M[p[i]] + occ[p[i]][sp - 1]
             temp_ep = M[p[i]] + occ[p[i]][ep] - 1
             while temp_sp > temp_ep:
@@ -627,6 +557,19 @@ class Aligner:
         If no good matches are found: return the best match you can find or return []
         """
 
+        # Desired way to do it.
+
+        # range_for, num_mismatches_for = self.recursive_inexact_alignment(read_sequence, self._t_m, self._t_occ)
+        # range_rev, num_mismatches_rev = self.recursive_inexact_alignment(read_sequence[::-1], self._t_m_r, self._t_occ_r)
+
+        # if num_mismatches_for <= num_mismatches_rev:
+        #     location = self._t_sa[range_for[0]]
+        # else:
+        #     location = self._t_sa_r[range_rev[0]]
+        
+        # return (0, location, )
+
+
         # Initialize return value and matches
         isoform_matches = [] # [(isoform.id, locations, num_mismatches)...]
         exon_matches = [] # [(<read_start_1>, <reference_start_1, length_1), (<read_start_2>, <reference_start_2, length_2), ...]
@@ -634,11 +577,13 @@ class Aligner:
         # Matches are in the form (read start index, genome start index, length)
         for isoform_id in self._isoforms.keys():
             isoform = self._isoforms[isoform_id]
-            m, occ =  isoform[2], isoform[3]
-            locations, num_mismatches = self.greedy_inexact_alignment(read_sequence, m, occ, isoform_id)
+            m, occ =  isoform[2], isoform[3] # start and end index
+            locations, num_mismatches = self.recursive_inexact_alignment(read_sequence, m, occ, isoform_id)
             if locations:
                 # Want to add to list of matches and then find the best match.
                 isoform_matches.append((isoform_id, locations, num_mismatches))
+        
+        locations, num_mismatches = self.recursive_inexact_alignment(read_sequence, m, occ, isoform_id)
 
         
         # Check to see if there are any returned matches.
@@ -697,7 +642,83 @@ class Aligner:
                 ifs_offset += length
         
         return exon_matches
-                                
+
+    def align_to_transcriptome(self, read_sequence):
+        """
+        Returns the best alignment of the read sequence to the isoform database. 
+        Prioritize matching to known isoforms. Minimize number of mismatches
+
+        read_sequence: input read text to be aligned
+
+        Return value must be in the form (also see the project pdf):
+        [(<read_start_1>, <reference_start_1, length_1), (<read_start_2>, <reference_start_2, length_2), ...]
+
+        If no good matches are found: return the best match you can find or return []
+        """
+        exon_matches = []
+
+        # Align forward and reverse to transcriptome
+        range_for, num_mismatches_for = self.recursive_inexact_alignment(read_sequence, self._t_m, self._t_occ, ) # range in transcriptome
+        range_rev, num_mismatches_rev = self.recursive_inexact_alignment(read_sequence[::-1], self._t_m_r, self._t_occ_r) # range in r transcriptome
+
+        # Check for any alignments
+        if range_for[0] or range_rev[0]:        
+            # Select best alignment (f or r)
+            if num_mismatches_for <= num_mismatches_rev:
+                location = self._t_sa[range_for[0] - 1]
+            else:
+                location = self._t_sa_r[range_rev[0] - 1]
+
+            # Read sequence indices in the transcriptome
+            start_r_t, end_r_t = location[0], location[1]
+
+            # Read sequence indices in original read
+            start_r_o, end_r_o = 0, len(read_sequence) - 1
+
+            # Find corresponding isoform and location in isoform
+            isoform_id, start_i_t, end_i_t = '', 0, 0 # isoform id, start of alignment in transcriptome, end of alignment in transcriptome
+            for s in self._isoform_indices.keys():
+                e = self._isoform_indices[s][0]
+                # check to see if in isoform
+                if s <= start_r_t and end_r_t <= e:
+                    start_i_t, end_i_t = s, e
+                    isoform_id = self._isoform_indices[s]
+
+            # Now need to convert into correct format.
+            # Format: [(index of read, index of genome, length of match)]
+
+            read_index = 0 # Current index in read
+            genome_index = 0 # Current index in genome
+            t_index = start_i_t # Current index in transcriptome 
+            t_offset = start_r_t # offset left in transcriptome
+
+            # Iterate thru exons
+            for exon in isoform.exons:
+                # Progress to exon in isoform where read starts
+                # if length of offset greater than that of exon, go to next exon
+                if (exon.end - exon.start) < t_offset:
+                    # subtract exon length from offset
+                    t_offset -= exon.end - exon.start
+                    continue
+                
+                # Progress to location in exon if any t_offset left
+                genome_index = exon.start + t_offset
+
+                # Check to get amount of read left
+                remaining_read = end_r_o - read_index
+                if remaining_read < (exon.end - exon.start):
+                    length = exon.end - genome_index
+                else:
+                    length = remaining_read
+
+                # Add to matches
+                exon_matches.append((read_index, genome_index, length))
+
+                # Progress read_index
+                read_index += length
+        
+        return exon_matches
+
     def align_to_genome(self, read_sequence):
         """
         Returns the best alignment of the read sequence to the genome. This will cover reads
@@ -710,17 +731,20 @@ class Aligner:
 
         If no good matches are found: return the best match you can find or return []
         """
-        # Return value
-        matches = []
-        # Retrieve the best inexact alignment to the genome
-        # locations = (<range of matches in suffix array>, <length of longest match>)
-        locations, num_mismatches = self.recursive_inexact_alignment(read_sequence, self._m, self._occ)
 
-        if locations:
-            matches.append((0, self._sa[locations[0][0]]))
+        range_for, num_mismatches_for = self.recursive_inexact_alignment(read_sequence, self._m, self._occ)
+        range_rev, num_mismatches_rev = self.recursive_inexact_alignment(read_sequence[::-1], self._m_r, self._occ_r)
         
-        return matches
+        if range_for[0] or range_rev[0]:     
+            if num_mismatches_for <= num_mismatches_rev:
+                location = self._t_sa[range_for[0] - 1]
+            else:
+                location = self._t_sa_r[range_rev[0] - 1]
+            
+            return (0, location, len(read_sequence))
 
+        return []
+        
     def align_seeds(self, read_sequence):
         """
         Split into seeds and align.
@@ -733,56 +757,51 @@ class Aligner:
         If no good matches are found: return the best match you can find or return []
         """
 
-        # Making the seeds.
-        l = len(read_sequence)
-        n = l / 4
-        i = 0        
-        seeds = []
-        while i < l:
-            if i + n < l:
-                seeds.append(read_sequence[i:i + n])
-            else:
-                seeds.append(read_sequence[i:l])
+        def exon_creator(read_sequence, genome, m, occ, sa):
+            # Making the seeds.
+            l = len(read_sequence)
+            n = int(l / 4)
+            i = 0        
+            seeds = []
+            while i < l:
+                if i + n < l:
+                    seeds.append(read_sequence[i:i + n])
+                    i += n
+                else:
+                    seeds.append(read_sequence[i:l])
+                    i = l
 
-        # Aligning the seeds against the genome.
-        alignments = []
-        for seed in seeds:
-            alignments.append(self.greedy_inexact_alignment(seed, self._m, self._occ))
+            # Aligning the seeds against the genome.
+            alignments = []
+            for seed in seeds:
+                alignments.append(self.recursive_inexact_alignment(seed, m, occ, 0))
 
-        # Making sure that they are in the right order, need intron size range.
-        MIN_INTRON_SIZE = 20
-        MAX_INTRON_SIZE = 10000
+            # Making sure that they are in the right order, need intron size range.
+            for i in range(0, len(alignments)):
+                for j in range(i + 1, len(alignments)):
+                    # Making sure it's the difference between the end of the first and beginning of second.
+                    diff = sa[alignments[j][0][0]] - sa[alignments[i][0][0]] + len(seeds[i])
+                    # Doing this accounts for the seeds being in the necessary order.
+                    if diff > MIN_INTRON_SIZE and diff < MAX_INTRON_SIZE:
+                        # Need to figure out the ID stuff --> do we need to make new isoform?
+                        exon1 = genome[sa[alignments[i][0][0]] - (l - len(seeds[i])):sa[alignments[i][0][0]] + len(seeds[i])]
+                        exon2 = genome[sa[alignments[j][0][0]]:sa[alignments[j][0][0]] + l]
+                        isoform_string = exon1 + exon2
+                        # Now trying to align read to this new isoform.
+                        return self.recursive_inexact_alignment(read_sequence, get_M(isoform_string), get_occ(isoform_string), 0)
 
-
-        for i in range(0, len(alignments)):
-            for j in range(i + 1, len(alignments)):
-                # Making sure it's the difference between the end of the first and beginning of second.
-                diff = alignments[j][0] - alignments[i][0] + len(seeds[i])
-                # Doing this accounts for the seeds being in the necessary order.
-                if diff > MIN_INTRON_SIZE and diff < MAX_INTRON_SIZE:
-                    # Need to figure out the ID stuff --> do we need to make new isoform?
-                    exon1 = genome_sequence[alignments[i][0] - (l - len(seeds[i])):alignments[i][0] + len(seeds[i])]
-                    exon2 = genome_sequence[alignments[j[0]]:alignments[j[0]] + l]
-                    isoform_string = exon1 + exon2
-                    # Now trying to align read to this new isoform.
-                    val = self.greedy_inexact_alignment(read_sequence, get_m(isoform_string), get_occ(isoform_string))
-                    if val is not None:
-                        return val
-
+        range_for, num_mismatches_for = exon_creator(read_sequence, self._genome_seq, self._m, self._occ, self._sa)
+        range_rev, num_mismatches_rev = exon_creator(read_sequence[::-1], self._genome_seq[::-1], self._m_r, self._occ_r, self._sa_r)
         
-
-        # Making offset seeds in order to find all unknown exons.
-        i = 6
-        reads.append(read_sequence[0:i])
-        while i < l:
-            if i + n < l:
-                reads.append(read_sequence[i:i + n])
+        if range_for[0] or range_rev[0]:  
+            if num_mismatches_for <= num_mismatches_rev:
+                location = self._t_sa[range_for[0] - 1]
             else:
-                reads.append(read_sequence[i:l])
+                location = self._t_sa_r[range_rev[0] - 1]
+            
+            return (0, location, len(read_sequence))
         
-        # Finding the reads.
-        for read in reads:
-            greedy_inexact_alignment
+        return []
 
     def align(self, read_sequence):
         """
@@ -805,7 +824,7 @@ class Aligner:
         reads = []
 
         # Try aligning to the isoform database (case 1 in tophat2)
-        reads = self.align_to_isoforms(read_sequence)
+        reads = self.align_to_transcriptome(read_sequence)
 
         # Align to genome if no isoform matches (case 2 in tophat2)
         if not reads:
