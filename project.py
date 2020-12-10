@@ -579,41 +579,6 @@ class Aligner:
         array w/isoform id of every index in transcriptome
         """
 
-        # match = exact_suffix_matches(p, M, occ)
-        # query_length = len(p)
-        # if match[1] == query_length:
-        #     if isoform_id is not None:
-        #         r_match_index = self._isoforms[isoform_id][1][match[0][1]]
-        #         return (r_match_index, num_mismatches)
-        #     else:
-        #         r_match_index = self._sa[match[0][0]]
-        #         return (r_match_index, num_mismatches)
-        # elif num_mismatches == 6:
-        #     return (None, None)
-        # else:
-        #     match = self.helper(p, M, occ, num_mismatches)
-
-
-        #     q_match_index = query_length - match[1]
-        #     # Iterate through all matches and find the best one.
-        #     inner_matches = []
-        #     for k in range(match[0][0], match[0][1]):
-        #         if isoform_id is not None:
-        #             r_match_index = self._isoforms[isoform_id][1][k]
-        #             p[q_match_index] = self._isoforms[isoform_id][4][r_match_index]
-        #         else:
-        #             r_match_index = self._sa[k]
-        #             p = p[:q_match_index - 1] + self._genome_seq[r_match_index] + p[q_match_index + 1:]
-        #         # This is supposed to
-        #         inner_matches.append(self.recursive_inexact_alignment(p, M, occ, num_mismatches + 1, isoform_id))
-        #     best = (None, 7)
-        #     for match in inner_matches:
-        #         if match[1] < best[1]:
-        #             best = match
-        #     return best
-            # return self.recursive_inexact_alignment(p, M, occ, num_mismatches + 1, isoform_id)
-
-        # Code from above
         iterator = iter(M.keys())
         r = {} # Dictionary (index, [bases tried at index])
         nucleotides = ['A', 'C', 'T', 'G']
@@ -733,7 +698,6 @@ class Aligner:
         
         return exon_matches
                                 
-
     def align_to_genome(self, read_sequence):
         """
         Returns the best alignment of the read sequence to the genome. This will cover reads
@@ -819,10 +783,6 @@ class Aligner:
         # Finding the reads.
         for read in reads:
             greedy_inexact_alignment
-
-
-        
-    
 
     def align(self, read_sequence):
         """
