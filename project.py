@@ -511,7 +511,7 @@ class Aligner:
 
         iterator = iter(M.keys())
         r = {} # Dictionary (index, [bases tried at index])
-        nucleotides = ['A', 'C', 'T', 'G']
+        string_matched = ''
         while True:
             char = next(iterator)
             if char == p[-1]:
@@ -523,21 +523,23 @@ class Aligner:
                 break
         if ep < sp:
             return ((None), 0)
+        string_matched = char + string_matched
         i = len(p) - 2
-        while i >= 0  and num_mismatches < MAX_NUM_MISMATCHES:
-            # print(p[i])
+        while i >= 0 and num_mismatches < MAX_NUM_MISMATCHES:
+            curr = (p[i])
+            string_matched = curr + string_matched
             temp_sp = M[p[i]] + occ[p[i]][sp - 1]
             temp_ep = M[p[i]] + occ[p[i]][ep] - 1
-            while temp_sp > temp_ep:
+            while temp_sp > temp_ep + 1:
                 if i in r.keys():
                     r[i].append(p[i])
                 else:
                     r[i] = [p[i]]
                     num_mismatches += 1
                 if len(r[i]) == 4:
-                    return (None, None)
+                    return ((None), 0)
                 else:
-                    p = p[:i] + str(random.choice(list(set(nucleotides) - set(r[i])))) + p[i+1:]
+                    p = p[:i] + str(random.choice(list(set(BASES) - set(r[i])))) + p[i+1:]
                     temp_sp = M[p[i]] + occ[p[i]][sp - 1]
                     temp_ep = M[p[i]] + occ[p[i]][ep] - 1
             sp, ep = temp_sp, temp_ep
@@ -577,7 +579,7 @@ class Aligner:
         # Matches are in the form (read start index, genome start index, length)
         for isoform_id in self._isoforms.keys():
             isoform = self._isoforms[isoform_id]
-            m, occ =  isoform[2], isoform[3] # start and end index
+            m, occ =  isoform[2], isoform[3]
             locations, num_mismatches = self.recursive_inexact_alignment(read_sequence, m, occ, isoform_id)
             if locations:
                 # Want to add to list of matches and then find the best match.
@@ -780,12 +782,12 @@ class Aligner:
             for i in range(0, len(alignments)):
                 for j in range(i + 1, len(alignments)):
                     # Making sure it's the difference between the end of the first and beginning of second.
-                    diff = sa[alignments[j][0][0]] - sa[alignments[i][0][0]] + len(seeds[i])
+                    diff = sa[alignments[j][0][0] - 1] - sa[alignments[i][0][0] - 1] + len(seeds[i])
                     # Doing this accounts for the seeds being in the necessary order.
                     if diff > MIN_INTRON_SIZE and diff < MAX_INTRON_SIZE:
                         # Need to figure out the ID stuff --> do we need to make new isoform?
-                        exon1 = genome[sa[alignments[i][0][0]] - (l - len(seeds[i])):sa[alignments[i][0][0]] + len(seeds[i])]
-                        exon2 = genome[sa[alignments[j][0][0]]:sa[alignments[j][0][0]] + l]
+                        exon1 = genome[sa[alignments[i][0][0] - 1] - (l - len(seeds[i])):sa[alignments[i][0][0] - 1] + len(seeds[i])]
+                        exon2 = genome[sa[alignments[j][0][0] - 1]:sa[alignments[j][0][0] - 1] + l]
                         isoform_string = exon1 + exon2
                         # Now trying to align read to this new isoform.
                         return self.recursive_inexact_alignment(read_sequence, get_M(isoform_string), get_occ(isoform_string), 0)
