@@ -8,11 +8,12 @@ import re
 import time
 import zlib
 import signal
+import pickle
 # import unittest
 
 import sufarray 
 from multiprocessing import Process
-# from pprint import pprint
+from pprint import pprint
 # from itertools import zip_longest, islice
 
 from shared import *
@@ -124,13 +125,15 @@ def test_exact_matches(p, s):
     locations = exact_suffix_matches(p, M, occ)
     print("locations: ", locations)
 
+def test_align_to_transcriptome(aligner, p):
+    return aligner.align_to_transcriptome(p)
+
 def test_align_seeds(aligner, p):
     m, occ =  aligner._m, aligner._occ
     values = aligner.align_seeds(p)
 
 def test_align(aligner, p):
-    reads = aligner.align(p)
-    print("reads: ", reads)
+    return aligner.align(p)
 
 def test_align_to_genome(aligner, p):
     reads = aligner.align_to_genome(p)
@@ -147,50 +150,81 @@ def main():
     print("\nParsing reads")
     reads = parse_reads()
 
-    print("\nParsing genes")
-    genes = parse_genes()
-    # pprint(genes)
-
-
     print("\nParsing genome")
     genome = parse_genome()
 
+    print("\nParsing genes")
+    genes = parse_genes()
+    # pprint(genes)
+    # first = genes.pop()
+    # iso = ''
+    # for exon in first.isoforms[0].exons:
+        # print((exon.start, exon.end-exon.start)) in genome
+        # iso += genome[exon.start:exon.end] + " "
+    # print(iso)
+    # print(first.id)
 
-    print("\nTesting suffix array")
-    start_time = time.time()
-    suffix_array = get_suffix_array(example)
-    print("--- %s seconds ---" % (time.time() - start_time))
-    print("\nTesting thiers")
-    start_time = time.time()
-    sa_theirs = sufarray.SufArray(example).get_array()
-    print(len(suffix_array))
-    print(len(sa_theirs))
-    # diff =  set(sa_theirs) - set(suffix_array)
-    # print(list(diff))
-    # print(suffix_array)
-    print("--- %s seconds ---" % (time.time() - start_time))
-    print("accurate? ", suffix_array == sa_theirs)
+    # print("\nTesting suffix array")
+    # start_time = time.time()
+    # suffix_array = get_suffix_array(example)
+    # print("--- %s seconds ---" % (time.time() - start_time))
+    # print("\nTesting thiers")
+    # start_time = time.time()
+    # sa_theirs = sufarray.SufArray(example).get_array()
+    # print(len(suffix_array))
+    # print(len(sa_theirs))
+    # # diff =  set(sa_theirs) - set(suffix_array)
+    # # print(list(diff))
+    # # print(suffix_array)
+    # print("--- %s seconds ---" % (time.time() - start_time))
+    # print("accurate? ", suffix_array == sa_theirs)
+
+
+    # print("Pickle")
+    # aligner = test_init(genome, genes)
+    # pickle.dump(aligner, open('aligner_onject', 'wb'))
+    print("Unpickle")
+    aligner = pickle.load(open('pickle/aligner_onject', 'rb'))
 
 
     # query = "GAAAAGGACATTTGTAATAGGAATTTTAAGATTTTATTA"
 
-    query = "GAAAAGG"
+    # # query = "CAAAAGG"
 
-    test_exact_matches(query, example)
+    # test_exact_matches(query, example)
+    # # test_exact_matches_two(query, example)
 
-    print("\nTesting dummy genome")
-    aligner = test_init(example, genes)
-    print("Genome length:", len(example))
+    # print("\nTesting dummy genome")
+    # print("Genome length:", len(example))
 
-    aligned = test_align_to_genome(aligner, query)
+    # aligned = test_align_to_genome(aligner, query)
+    
+    # test_align_to_transcriptome()
+    # aligner = test_init(genome, genes)
 
-    # print("\nTesting align: ")
-    # # test_align_seeds(aligner, dummy_genome)
-    # # test_exact_matches(dummy_genome, example2)
-    # # test_greedy(aligner, "GCAA")
-    # # test_greedy(aligner, dummy_genome)
-    # test_align(aligner, query)
-    # dummy_genome = "TAATAGGAATTTTAAGATTTTATTACTTCTTC"
+    full_isoform = "TGGCGCTCCTGCTGTGCTTCGTGCTCCTGTGCGGAGTAGTGGTTTCGCCAGAAGTTTGAGTATCACTACTCCTGAAGAGATGATTGAAAAAGCCAAAGGGGAAACTGCCTATCTGCCATGCAAATTTACGCTTAGTCCCGAAGACCAGGGACCGCTGGACATCGAGTGGCTGATATCACCAGCTGATAATCAGAAGGTGGATCAAGTGGAAGATGTGCCACCTCCAAAGAGCCGTACGTCCACTGCCAGAAGCTACATCGGCAGTAACTGAACTCCCAATCTGCTTCAAGATCTGTCTTAGGATTGGTGAATTATGTTCATTTTTAAAAAGGGATGTGATAGACAACATCTAGAGAAACAGGCAAGAGTATATATCTGAAAAGGACAAGGCGCTTTGAAACTGACAGCTCATCAACAGGTTCATGGATGAACCTGGAAATATTTATAAATATTGATTCCAGATTTCAGGACGGGGTTTCGAAATGTTGCCCAGGTTGGTCTAGAACTCCCGGACTCAAGTGATCCCCCGACCAGGCCTCCCAAAGTGCTGGGATTATCGGTGTGAGCCACCAACCCCTGCAGAGTCTACATCTGAAATAAACCACAGAAGCAAGGATATCACTTAAACAATGTAACTTACCAATTCAGTCTGAGTGAGTTTTGTAGTTTATAACATATTGATGAAAACAGTTAAGTGTCCACATTCCGTTTACATAAGAGAATGCTATTCAAGCTTTTAAAATAAAAAACTTAAACTATTCCCCTCACCCCCCAAAAAGTCTAACTATAAAGATGGGTTTGCTACAAAATAATTAGCAAAACTGATTTACCAAGTAAGATGTCCTCCCGCTCACTGCCCCCCAGAAATACGTATACTGTAGGAATACTCCTAGGAAGTGACACAAGTGAAAGAAAGAATATTCTTTCAATATGCTAAAAACATCTACAGTGCACTAAAAAAAAGTCCCTAAATTTGGCAATACATTTCTTCCAAAAATGTTATTCAATAACATAAACATTATGAAGTAGAACTGGCTGTCCCATATGTTCAGAATAAAAGGGTTAAGTGGAGTCCTGCATAACTAGCAGTAGACGCGATCTGTTCGCTACTACCGGCCTCCCCTGGCTGTTAAAAGCAGATGGTGGCTGAGGTTTGTTCAATGCCCACTGCCTCTACTGTGAAGAAGCCATTTGATCTCAGGAGCAAGATGGGCAAGTGGTGCCACCACCGCTTCCCCTGCTGCAGGGGGAGCGGCAAGAGCAACATGGGCACTTCTGGAGACCACGACGACTCCTTTATGAAGATGCTCAGGAGCAAGATGGGCAAGTGTTGCCGCCACTGCTTCCCCTGCTGCAGGGGGAGCGGCACGAGCAACGTGGGCACTTCTGGAGACCATGAAAACTCCTTTATGAAGATGCTCAGGAGCAAGATGGGCAAGTGGTGCTGTCACTGCTTCCCCTGCTGCAGGGGGAGCGGCAAGAGCAACGTGGGCGCTTGGGGAGACTACGACCACAGCGCCTTCATGGAGCCGAGGTACCACATCCGTCGAGAAGATCTGGACAAGCTCCACAGAGCTGCCTGGTGGGGTAAAGTCCCCAGAAAGGATCTCATCGTCATGCTCAGGGACACTGACATGAACAAGAGGGACAAGGAAAAGAGACTGCTCTACATTTGGCCTCTGCCAATGGAAATTCAGAAGTAGTACAACTCCTGCTGGACAGACGATGTCAACTTAATGTCCTTGACAACAAAAAAAGGACAGCTCTGATAAAGCCATACAATGCCAGGAAGATGAATGTGTGTTAATGTTGCTGGAACATGGCGCTGATCGAAATATTCCAGATGAGTATGGAAATACCGCTCTACACTATGCTATCTACAATGAAGATAAATTAATGGCCAAAGCACTGCTCTTATATGGTGCTGATATTGAATCAAAAAACAAG GTGGCCTCACACCACTTTTGCTTGGCGTACATGAACAAAAACAGCAAGTGGTGAAATTTTTAATCAAGAAAAAAGCTAATTTAAATGTACTTGATAGATATGGAAGACTGCCCTCATACTTGCTGTATGTTGTGGATCAGCAAGTATAGTCAATCTTCTACTTGAGCAAAATGTTGATGTATCTTCTCAAGATCTATCTGGACAGACGGCCAGAGAGTATGCTGTTTCTAGTCATCATCATGTATTTGTGAATTACTTTCTGACTATAAAGAAAAACAGATGCTAAAAATCTCTTCTGAAAACAGCAATCCAGACAAGACTTAAAGCTGACATCAGAGGAAGAGTCACAAAGGCTTAAAGTCAGTGAAAATAGCCAGCCAGAGAAATGTCTCAAGAACCAGAAATAAATAAGGACTGTGATAGAGAGTTGAAGAAGAAATAAAGAAGCATGGAAGTAATCCTGTGGGATTACCAGAAAACCTGACTAATGGTGCCAGTGCTGGCAATGGTGATGATGGATTAATTCCACAAAGGAGGAGCAGAAAACCTGAAAATCAGCAATTTCCTGACACTGAGAATGAAGAGTATCACAGGATGAACAAAATGATACCCGGAAACAACTTTCTGAAGAACAGAACACTGGAATATCACAAGATGAGATTCTGACTAATAAACAAAAGCAGATAGAAGTGGCTGAACAGAAAATGAATTCTGAGTTTCTCTTAGTCATAAGAAAGAAGAAGATCTCTTGCGTGAAAACAGCGTGTTGCAGGAAGAAATTGCCATGCTAAGACTGGAACTAGATGAAACAAAACATCAGAACCAGCTAAGGGAAAATAAAATTTTGGAGGAAATTGAAAGTGTGAAAGAAAAGACTGATAAACTTCTAAGGGCTATGCAATTGAATGAAGAAGCATTAACGAAAACCAATATTTAAGTACAGTGGACAGCTTAGG"
+
+    true_output = [(0, 6462130, 42), (42, 6496027, 33)]
+    true_output1 = [(0, 6462130, 42), (42, 6496027, 138)]
+    pattern1 = "TGGCGCTCCTGCTGTGCTTCGTGCTCCTGTGCGGAGTAGTGGTTTCGCCAGAAGTTTGAGTATCACTACTCCTGAAGAGATGATTGAAAAAGCCAAAGGGGAAACTGCCTATCTGCCATGCAAATTTACGCTTAGTCCCGAAGACCAGGGACCGCTGGACATCGAGTGGCTGATATCACC"
+    pattern = "TGCCGCTCCTGCAGTGCTTCGTGCACCTGTGCGGAGTCGTGGTTTCGCCAGAAGTTTGAGTATCACTACTCCTGA"
+
+    # print("\nTesting align to transcriptome: ")
+    # out = test_align_to_transcriptome(aligner, pattern)
+    # print("true: ", true_output)
+    # print("out: ", out)
+    # print(f'accurate? {true_output == out}')
+
+
+    print("\nTesting align: ")
+    # test_align_seeds(aligner, dummy_genome)
+    # test_exact_matches(dummy_genome, example2)
+    # test_greedy(aligner, "GCAA")
+    # test_greedy(aligner, dummy_genome)
+    out = test_align(aligner, pattern)
+    print("true: ", true_output)
+    print("out: ", out)
+    print(f'accurate? {true_output == out}')
 
     # # print("\nTesting init function")
     # # aligner = test_init(example, genes)
