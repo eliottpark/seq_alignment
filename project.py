@@ -16,6 +16,7 @@ import numpy as np
 import heapq
 import time
 import random
+import difflib
 # import sufarray
 
 # from pysuffixarray.core import SuffixArray
@@ -492,7 +493,7 @@ class Aligner:
 
         return None, None
 
-    def recursive_inexact_alignment(self, p, M, occ, num_mismatches=0, isoform_id=None):
+    def recursive_inexact_alignment(self, query, M, occ, isoform_id=None):
         """
         Run a greedy inexact alignment algorithm to determine an alignment to the reference text
         with less than or equal to MAX_NUM_MISMATCHES. 
@@ -508,10 +509,13 @@ class Aligner:
         Make entire transcriptome --> concat w delimiters --> keep track of limits within the isoform 
         array w/isoform id of every index in transcriptome
         """
-
-        iterator = iter(M.keys())
+        num_mismatches=0
         r = {} # Dictionary (index, [bases tried at index])
         string_matched = ''
+        p = query
+
+        # Count algorithm
+        iterator = iter(M.keys())
         while True:
             char = next(iterator)
             if char == p[-1]:
@@ -523,28 +527,46 @@ class Aligner:
                 break
         if ep < sp:
             return ((None), 0)
-        string_matched = char + string_matched
+            
+        string_matched = char
         i = len(p) - 2
+        c = p[i]
+        this_alignment = self._genome_seq[self._sa[sp]]
+        alignments = [self._genome_seq[self._sa[x]:self._sa[x]+(len(p)-1-i)] for x in range(sp,ep+1)]
         while i >= 0 and num_mismatches < MAX_NUM_MISMATCHES:
-            curr = (p[i])
-            string_matched = curr + string_matched
-            temp_sp = M[p[i]] + occ[p[i]][sp - 1]
-            temp_ep = M[p[i]] + occ[p[i]][ep] - 1
-            while temp_sp > temp_ep + 1:
+            c = p[i]
+            string_matched = c + string_matched # for debugging 
+            temp_sp = M[c] + occ[c][sp - 1] # update rule
+            temp_ep = M[c] + occ[c][ep] - 1 # update rule
+            # if there are no matches, try to correct
+            while (temp_sp > temp_ep):
                 if i in r.keys():
-                    r[i].append(p[i])
+                    r[i].append(c)
                 else:
-                    r[i] = [p[i]]
+                    r[i] = [c]
                     num_mismatches += 1
-                if len(r[i]) == 4:
+                # If we run out of characters and we cannot add more mismatches, exit
+                if len(r[i]) == 4 and num_mismatches == MAX_NUM_MISMATCHES:
                     return ((None), 0)
+                # Else, substitute in a random character into p and continue
                 else:
-                    p = p[:i] + str(random.choice(list(set(BASES) - set(r[i])))) + p[i+1:]
-                    temp_sp = M[p[i]] + occ[p[i]][sp - 1]
-                    temp_ep = M[p[i]] + occ[p[i]][ep] - 1
+                    c_prime = str(random.choice(list(set(BASES) - set(r[i]))))
+                    p = p[:i] + c_prime + p[i+1:]
+                    temp_sp = M[c_prime] + occ[c_prime][sp - 1]
+                    temp_ep = M[c_prime] + occ[c_prime][ep] - 1
+            # finalize update of pointers
             sp, ep = temp_sp, temp_ep
+            ##### debug stuff
+            genome_index = self._sa[sp]
+            surrounding = self._genome_seq[self._sa[sp]:self._sa[sp]+len(this_alignment)]
+            this_alignment = self._genome_seq[self._sa[sp]] + this_alignment
+            #####
             i -= 1
-        return ((sp, ep + 1), num_mismatches)
+            ##### debug
+            alignments = [(self._genome_seq[self._sa[x]:self._sa[x]+(len(p)-1-i)], x) for x in range(sp-10,ep+11)]
+            this = 0
+            #####
+        return (sp, ep + 1), num_mismatches
 
     def align_to_isoforms(self, read_sequence):
         """
@@ -739,9 +761,19 @@ class Aligner:
         
         if range_for[0] or range_rev[0]:     
             if num_mismatches_for <= num_mismatches_rev:
-                location = self._t_sa[range_for[0] - 1]
+                # range_for[0] - 1
+                location = self._sa[range_for[0]]
             else:
-                location = self._t_sa_r[range_rev[0] - 1]
+                location = self._sa_r[range_rev[0]]
+
+            match = self._genome_seq[location:location+len(read_sequence)]
+            
+            for i,s in enumerate(difflib.ndiff(match, read_sequence)):
+                if s[0]==' ': continue
+                elif s[0]=='-':
+                    print(u'Delete "{}" from position {}'.format(s[-1],i))
+                elif s[0]=='+':
+                    print(u'Add "{}" to position {}'.format(s[-1],i))
             
             return (0, location, len(read_sequence))
 
@@ -797,9 +829,9 @@ class Aligner:
         
         if range_for[0] or range_rev[0]:  
             if num_mismatches_for <= num_mismatches_rev:
-                location = self._t_sa[range_for[0] - 1]
+                location = self._sa[range_for[0] - 1]
             else:
-                location = self._t_sa_r[range_rev[0] - 1]
+                location = self._sa_r[range_rev[0] - 1]
             
             return (0, location, len(read_sequence))
         
