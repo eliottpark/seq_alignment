@@ -24,6 +24,7 @@ import difflib
 # from memory_profiler import profile
 
 from shared import *
+from test import get_diff
 
 ALPHABET = [TERMINATOR] + BASES
 
@@ -328,20 +329,21 @@ class Aligner:
                 start = transcriptome_index # start in transcripome string
                 # Add to full transcriptome with delimiter
                 q = len(self._transcriptome)
+                temp = ''
                 for exon in isoform.exons: # If ordered, ok. if not, need to make sure
-                    self._transcriptome += genome_sequence[exon.start:exon.end]
-                self._transcriptome += '$'
-                diff = len(self._transcriptome) - q
-                transcriptome_index += diff               
+                    temp += genome_sequence[exon.start:exon.end]
+                temp += '$'
+                transcriptome_index += len(temp)    
+                self._transcriptome += temp          
 
                 self._isoforms[isoform.id] = [isoform,                       # 0 - full isoform object
-                                              start,                          # 1 - start index in stranscriptome string
-                                              transcriptome_index - 1       # 2 - end index in transcriptome string (at $)
+                                              start,                         # 1 - start (inclusive) index in stranscriptome string
+                                              transcriptome_index            # 2 - end (exclusive) index in transcriptome string (at $)
                                              ]     
 
         # FM Index for Transcriptome
-        self._t_sa_r = get_suffix_array(self._transcriptome[::-1])
         self._t_sa = get_suffix_array(self._transcriptome)
+        self._t_sa_r = get_suffix_array(self._transcriptome[::-1])
         self._t_bwt = get_bwt(self._transcriptome, self._t_sa)
         self._t_bwt_r = get_bwt(self._transcriptome[::-1], self._t_sa_r)
         self._t_m = get_M(get_F(self._t_bwt))
@@ -379,7 +381,6 @@ class Aligner:
         """
         num_mismatches=0
         r = {} # Dictionary (index, [bases tried at index])
-        string_matched = ''
         p = query
 
         # Count algorithm
@@ -396,17 +397,17 @@ class Aligner:
         if ep < sp:
             return ((None), 0)
 
-        string_matched = char
         i = len(p) - 2
         c = p[i]
         while i >= 0 and num_mismatches < MAX_NUM_MISMATCHES:
-            match = [self._transcriptome[self._t_sa[x]:self._t_sa[x]+len(p) - i] for x in range(sp, ep+1)]
+            # match = [self._transcriptome[self._t_sa[x]:self._t_sa[x]+len(p) -1 - i] for x in range(sp, ep+1)]
             c = p[i]
             temp_sp = M[c] + occ[c][sp - 1] # update rule
             temp_ep = M[c] + occ[c][ep] - 1 # update rule
             # if there are no matches, try to correct
-            while (temp_sp > temp_ep): 
-                if i in r.keys():
+            while (temp_sp > temp_ep + 1) and num_mismatches < MAX_NUM_MISMATCHES: 
+                # Check to see if character already subbed
+                if i in r.keys() and c not in r[i]:
                     r[i].append(c)
                 else:
                     r[i] = [c]
@@ -440,7 +441,7 @@ class Aligner:
         exon_matches = []
 
         # Align forward and reverse to transcriptome
-        range_for, num_mismatches_for = self.recursive_inexact_alignment(read_sequence, self._t_m, self._t_occ, ) # range in transcriptome
+        range_for, num_mismatches_for = self.recursive_inexact_alignment(read_sequence, self._t_m, self._t_occ ) # range in transcriptome
         range_rev, num_mismatches_rev = self.recursive_inexact_alignment(read_sequence[::-1], self._t_m_r, self._t_occ_r) # range in r transcriptome
 
         # Check for any alignments
@@ -448,15 +449,15 @@ class Aligner:
             # Select best alignment (f or r)
             if num_mismatches_for <= num_mismatches_rev and range_for[0]:
                 # Read sequence indices in the transcriptome
-                start_r_t = self._t_sa[range_for[0] - 1] 
+                start_r_t = self._t_sa[range_for[0]] 
                 end_r_t = start_r_t + len(read_sequence)
             elif range_rev[0]:
                 # Read sequence indices in the transcriptome
-                start_r_t = self._t_sa_r[range_for[0] - 1]
+                start_r_t = self._t_sa_r[range_for[0]]
                 end_r_t = start_r_t + len(read_sequence)
             else:
                 return []
-                
+
             # Read sequence indices in original read
             start_r_o, end_r_o = 0, len(read_sequence) - 1
 
@@ -484,28 +485,30 @@ class Aligner:
 
                 # Iterate thru exons
                 for exon in self._isoforms[isoform_id][0].exons:
-                    # Progress to exon in isoform where read starts
-                    # if length of offset greater than that of exon, go to next exon
-                    if (exon.end - exon.start) < t_offset:
-                        # subtract exon length from offset
-                        t_offset -= (exon.end - exon.start)
-                        continue
-                    
-                    # Progress to location in exon if any t_offset left
-                    genome_index = exon.start + t_offset
+                    remaining_read = end_r_o - read_index # amount remaining in original read
+                    if remaining_read > 0:
+                        # Progress to exon in isoform where read starts
+                        # if length of offset greater than that of exon, go to next exon
+                        if (exon.end - exon.start) < t_offset:
+                            # subtract exon length from offset
+                            t_offset -= (exon.end - exon.start)
+                            continue
+                        
+                        # Progress to location in exon if any t_offset left
+                        genome_index = exon.start + t_offset
 
-                    # Check to get amount of read left
-                    remaining_read = end_r_o - read_index # in original read
-                    if remaining_read > (exon.end - genome_index):
-                        length = exon.end - genome_index # length of this read
-                    else:
-                        length = remaining_read
+                        # Check to get amount of read left
+                        if remaining_read > (exon.end - genome_index):
+                            length = exon.end - genome_index - 1 # length of this read
+                        else:
+                            length = remaining_read
 
-                    # Add to matches
-                    exon_matches.append((read_index, genome_index, length))
+                        # Add to matches
+                        if length > 0:
+                            exon_matches.append((read_index, genome_index, length))
 
-                    # Progress read_index
-                    read_index += length
+                        # Progress read_index
+                        read_index += length + 1
         
         return exon_matches
 
@@ -524,31 +527,27 @@ class Aligner:
 
         range_for, num_mismatches_for = self.recursive_inexact_alignment(read_sequence, self._m, self._occ)
         range_rev, num_mismatches_rev = self.recursive_inexact_alignment(read_sequence[::-1], self._m_r, self._occ_r)
-        print("forward start: ", self._sa[range_for[0]])
-        print("reverse start: ", self._sa_r[range_rev[0]])
-        if range_for[0] or range_rev[0]:     
-            if num_mismatches_for <= num_mismatches_rev:
-                # range_for[0] - 1
-                location = self._sa[range_for[0]]
-            else:
-                location = self._sa_r[range_rev[0]]
+        # print("forward start: ", self._sa[range_for[0]])
+        # print("reverse start: ", self._sa_r[range_rev[0]])
+        # if range_for[0] or range_rev[0]:     
+        #     if num_mismatches_for <= num_mismatches_rev:
+        #         # range_for[0] - 1
+        #         location = self._sa[range_for[0]]
+        #     else:
+        #         location = self._sa_r[range_rev[0]]
 
-            match = self._genome_seq[location:location+len(read_sequence)]
+        #     match = self._genome_seq[location:location+len(read_sequence)]
             
-            diff = 0
-            for i,s in enumerate(difflib.ndiff(match, read_sequence)):
-                if s[0]==' ': continue
-                elif s[0]=='-':
-                    diff += 1
-                    print(u'Delete "{}" from position {}'.format(s[-1],i))
-                elif s[0]=='+':
-                    diff += 1
-                    print(u'Add "{}" to position {}'.format(s[-1],i))
-            print("diff: ",  diff)
-            
-            return (0, location, len(read_sequence))
+        #     return (0, location, len(read_sequence))
 
-        return []
+        if num_mismatches_for <= num_mismatches_rev and range_for[0]:
+            return [(0, self._sa[range_for[0]], len(read_sequence))]
+        elif num_mismatches_for >= num_mismatches_rev and range_rev[0]:
+            return [(0, self._sa_r[range_rev[0]], len(read_sequence))]
+        else:
+            return []
+
+        # return []
         
     def align_seeds(self, read_sequence):
         """
@@ -579,34 +578,61 @@ class Aligner:
             # Aligning the seeds against the genome.
             alignments = []
             for seed in seeds:
-                alignments.append(self.recursive_inexact_alignment(seed, m, occ, 0))
+                alignments.append(self.recursive_inexact_alignment(seed, m, occ))
 
-            # Making sure that they are in the right order, need intron size range.
+            isoform_string = '' # overall isoform string for all seed matches
+            read_index = 0
+            matches = []
+            # Need to have all seeds aligned sequentially for a true alignment
             for i in range(0, len(alignments)):
-                for j in range(i + 1, len(alignments)):
-                    # Making sure it's the difference between the end of the first and beginning of second.
-                    diff = sa[alignments[j][0][0] - 1] - sa[alignments[i][0][0] - 1] + len(seeds[i])
-                    # Doing this accounts for the seeds being in the necessary order.
+                # If we are at the final seed, append (check between seeds occurs at the prior seed index)
+                if i == len(alignments) - 1:
+                    isoform_string += genome[sa[alignment[0][0]]:(sa[alignment[0][0]] + len(seeds[i]))]
+                    matches.append((read_index, sa[alignment[0][0]], len(seeds[i])))
+                else:
+                    # Test if this seed is close enough to the next
+                    diff = sa[alignments[j][0][0]] - (sa[alignments[i][0][0]] + len(seeds[i]))
                     if diff > MIN_INTRON_SIZE and diff < MAX_INTRON_SIZE:
-                        # Need to figure out the ID stuff --> do we need to make new isoform?
-                        exon1 = genome[sa[alignments[i][0][0] - 1] - (l - len(seeds[i])):sa[alignments[i][0][0] - 1] + len(seeds[i])]
-                        exon2 = genome[sa[alignments[j][0][0] - 1]:sa[alignments[j][0][0] - 1] + l]
-                        isoform_string = exon1 + exon2
-                        # Now trying to align read to this new isoform.
-                        return self.recursive_inexact_alignment(read_sequence, get_M(isoform_string), get_occ(isoform_string), 0)
-
-        range_for, num_mismatches_for = exon_creator(read_sequence, self._genome_seq, self._m, self._occ, self._sa)
-        range_rev, num_mismatches_rev = exon_creator(read_sequence[::-1], self._genome_seq[::-1], self._m_r, self._occ_r, self._sa_r)
-        
-        if range_for[0] or range_rev[0]:  
-            if num_mismatches_for <= num_mismatches_rev:
-                location = self._sa[range_for[0] - 1]
-            else:
-                location = self._sa_r[range_rev[0] - 1]
+                        # If the next is within the allowed distance, append current to list
+                        isoform_string += genome[sa[alignment[0][0]]:(sa[alignment[0][0]] + len(seeds[i]))]
+                        matches.append((read_index, sa[alignment[0][0]], len(seeds[i])))
+                        read_index += len(seeds[i])
+                    else:
+                        # we must align all seeds - if one is not close enought then we must exit
+                        return [], 0
             
-            return (0, location, len(read_sequence))
-        
-        return []
+            return matches, self.recursive_inexact_alignment(read_sequence, get_M(isoform_string), get_occ(isoform_string))[1]
+
+            # # Making sure that they are in the right order, need intron size range.
+            # for i in range(0, len(alignments)):
+            #     offset = 0 # offset of exon1 up until this seed alignment
+            #     for j in range(i + 1, len(alignments)):
+            #         # Making sure it's the difference between the end of the first and beginning of second.
+            #         diff = sa[alignments[j][0][0]] - (sa[alignments[i][0][0]] + len(seeds[i]))
+            #         # Doing this accounts for the seeds being in the necessary order.
+            #         if diff > MIN_INTRON_SIZE and diff < MAX_INTRON_SIZE:
+            #             # Need to figure out the ID stuff --> do we need to make new isoform? 
+            #             #                                           I don't believe so, just align - Eliott
+            #             exon1 = genome[(sa[alignments[i][0][0]] - offset):(sa[alignments[i][0][0]] + len(seeds[i]))] # beginning of read_sequence to start of intron
+            #             exon2 = genome[sa[alignments[j][0][0]]:sa[alignments[j][0][0]] + (l - len(exon1))] # end of intron to end of read sequence
+            #             isoform_string = exon1 + exon2
+            #             # Now trying to align read to this new isoform.
+            #             alignment = self.recursive_inexact_alignment(read_sequence, get_M(isoform_string), get_occ(isoform_string))
+            #             # Try to align to new isoform, if so, then do proper exon alignment
+
+
+
+            #     offset += seed[i]
+
+        matches_for, num_mismatches_for = exon_creator(read_sequence, self._genome_seq, self._m, self._occ, self._sa)
+        matches_rev, num_mismatches_rev = exon_creator(read_sequence[::-1], self._genome_seq[::-1], self._m_r, self._occ_r, self._sa_r)
+         
+        if num_mismatches_for <= num_mismatches_rev and matches_for:
+            return matches_for
+        elif num_mismatches_for >= num_mismatches_rev and matches_rev:
+            return matches_rev
+        else:
+            return []
 
     def align(self, read_sequence):
         """
@@ -641,42 +667,3 @@ class Aligner:
             reads = self.align_seeds(read_sequence)
                 
         return reads
-
-
-            
-            
-            ## OLD BOWTIE1 CODE #################################################################
-                # if index_ifs >= exon.start and index_ifs < exon.end:
-                #     exon_len = exon.end - start
-                #     exon_matches.append((read_index, )
-            # num_backtracks = 0
-            # while num_backtracks < k:
-            #     locations = exact_suffix_matches(query, M, occ)
-
-            #     # If we improve our match length, then we have successfully introduced a mismatch
-            #     if locations[1] > longest_match_length:
-            #         longest_match_length = locations[1]
-            #         best_match = locations
-            #         num_mismatches += 1
-                    
-            #     if locations[1] == 0: # might fold into else 
-            #         return [], 0
-            #     elif locations[1] == query_len and num_mismatches <= MAX_NUM_MISMATCHES:
-            #         return locations, num_mismatches
-            #     else:
-            #         i = query_len - locations[1] - 1
-            #         mismatched_char = query[i]
-            #         # leftmost just-visited position with minimal quality
-            #         j = i + 1
-            #         if j not in R.keys():
-            #             c = random.choice(set(nucleotides) - set(query[j]))
-            #             R[j] = set(c)
-                        
-            #         else:
-            #             c = random.choice(set(nucleotides) - set(R[j]))
-            #             R[j] += c
-            #         query[j] = c # Introducing a mismatch
-
-            #         num_backtracks += 1                   
-            # return [], 0
-    
