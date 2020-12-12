@@ -153,7 +153,19 @@ def test_exact_matches(p, s):
     occ = get_occ(L)
     print("\ntesting exact suffix matches")
     locations = exact_suffix_matches(p, M, occ)
+    # loc = recursive_inexact_alignment(p, M, occ) 
     print("locations: ", locations)
+    # print("inexact loc: ", loc)
+    found = s[sa[locations[0][0]]:sa[locations[0][0]]+locations[1]]
+    # found1 = s[sa[loc[0][0]]:sa[loc[0][0]]+len(p)] 
+    print(found)
+    # print(found1)
+    print(p)
+    print("found?", found == p )
+    return sa[locations[0][0]]
+
+# def test_inexact_matches(aligner, p):
+
 
 def test_exact_matches_two(p, genome_sequence):
     # Build SA, M, OCC for whole genome
@@ -169,6 +181,7 @@ def test_exact_matches_two(p, genome_sequence):
     print("\ntesting exact suffix matches")
     locations = exact_suffix_matches(p, _m, _occ)
     print("locations: ", locations)
+    return locations
 
 def test_align_to_transcriptome(aligner, p):
     return aligner.align_to_transcriptome(p)
@@ -220,7 +233,7 @@ def main():
     for exon in first.isoforms[0].exons:
         if i < 400:
         # print((exon.start, exon.end-exon.start)) in genome
-            indices.append((i, exon.start,  exon.end-exon.start - 1))
+            indices.append((i, exon.start,  exon.end-exon.start-1))
             iso += genome[exon.start:exon.end]
             i += exon.end-exon.start
     # print(first.id, ": ", iso)
@@ -232,21 +245,25 @@ def main():
     u_indices = []
     i = 0
     for exon in u_first.isoforms[0].exons:
-        if i < 600:
+        if i < 500:
         # print((exon.start, exon.end-exon.start)) in genome
-            u_indices.append((i, exon.start,  exon.end-exon.start - 1))
-            u_iso += genome[exon.start:exon.end]
+            u_indices.append((i, exon.start,  exon.end-exon.start-1))
+            u_iso += genome[exon.start:exon.end] + "\n"
             i += exon.end-exon.start
     # print(u_first.id, ": ", u_iso)
     # print(u_indices)
 
+    u_indices = [(0, 6455453 + 275 - 26, 26), (26, 6462130, 42), (26 + 42, 6496027, 13)]
+    u_iso = 'GGGTTCACGCCATTCTCCTGCCTCAGTGGCGCTCCTGCTGTGCTTCGTGCTCCTGTGCGGAGTAGTGGGTTTCGCCAGAAGT'
+    print(u_first.id, ": ", u_iso)
+    print(u_indices)
     # print("\nTesting suffix array")
     # start_time = time.time()
-    # suffix_array = get_suffix_array(example)
+    # suffix_array = get_suffix_array(genome)
     # print("--- %s seconds ---" % (time.time() - start_time))
     # print("\nTesting thiers")
     # start_time = time.time()
-    # sa_theirs = sufarray.SufArray(example).get_array()
+    # sa_theirs = sufarray.SufArray(genome).get_array()
     # print(len(suffix_array))
     # print(len(sa_theirs))
     # # diff =  set(sa_theirs) - set(suffix_array)
@@ -271,14 +288,21 @@ def main():
     print("out: ", out)
     print(f'accurate? { indices == out}')
 
+    # print("\nTest exact matches: ")
+    # ex = [(0, 50, 100)]
+    # out = test_exact_matches(example[50:120],example)
+    # print("true: ", ex)
+    # print("out: ", out)
+    # print(f'accurate? { ex == out}')
+
     print("\nTesting align to genome: ")
-    ex = [(0, 50, 100)]
+    ex = [(0, 50, 50)]
     start_time = time.time()
-    inp = "AATTTCTTGGTGATGTGCACGTTTGTCACACGGAATTGAACCCTTCTTCTGATTGAGCAGTTTGGAATC"
-    op = [(0, 0, len(inp))]
+    # inp = "AATTTCTTGGTGATGTGCACGTTTGTCACACGGAATTGAACCCTTCTTCTGATTGAGCAGTTTGGAATC"
+    # op = [(0, 0, len(inp))]
     # out = test_align(aligner, inp)
     # out = test_align(aligner, genome[ex[0][1]:ex[0][1]+ex[0][2]])
-    out = test_align_to_genome(aligner, genome[ex[0][1]:ex[0][1]+ex[0][2]])
+    out = test_align(aligner, genome[ex[0][1]:ex[0][1]+ex[0][2]])
     print("--- %s seconds ---" % (time.time() - start_time))
     print("true: ", ex)
     print("out: ", out)
@@ -286,8 +310,8 @@ def main():
 
     print("\nTesting align to unknown exons: ")
     start_time = time.time()
-    out = test_align(aligner,u_iso[:10]+'C'+u_iso[11:40]+'A'+u_iso[41:80]+'A'+u_iso[81:])
-    # out = test_align(aligner,u_iso)
+    # out = test_align(aligner,u_iso[:10]+'C'+u_iso[11:40]+'A'+u_iso[41:80]+'A'+u_iso[81:])
+    out = test_align(aligner,u_iso)
     print("--- %s seconds ---" % (time.time() - start_time))
     print("true: ", u_indices)
     print("out: ", out)
